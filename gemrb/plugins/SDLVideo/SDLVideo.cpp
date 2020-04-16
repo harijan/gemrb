@@ -94,7 +94,7 @@ int SDLVideoDriver::Init(void)
 {
 	//print("[SDLVideoDriver]: Init...");
 	if (SDL_InitSubSystem( SDL_INIT_VIDEO ) == -1) {
-		//print("[ERROR]");
+		Log(ERROR, "SDLVideo", "Init sub system Error %s", SDL_GetError());
 		return GEM_ERROR;
 	}
 	if (!(MouseFlags&MOUSE_HIDDEN)) {

@@ -28,8 +28,7 @@ def CreateControlDecorator(func):
 		return wrapper(func)
 	return func # unchanged, no wrapper exists
 
-class GTable:
-  __metaclass__ = metaIDWrapper
+class GTable(metaclass=metaIDWrapper):
   methods = {
     'GetValue': _GemRB.Table_GetValue,
     'FindValue': _GemRB.Table_FindValue,
@@ -47,15 +46,13 @@ class GTable:
   def __nonzero__(self):
     return self.ID != -1
 
-class GSymbol:
-  __metaclass__ = metaIDWrapper
+class GSymbol(metaclass=metaIDWrapper):
   methods = {
     'GetValue': _GemRB.Symbol_GetValue,
     'Unload': _GemRB.Symbol_Unload
   }
 
-class GWindow:
-  __metaclass__ = metaIDWrapper
+class GWindow(metaclass=metaIDWrapper):
   methods = {
     'GetRect': _GemRB.Window_GetRect,
     'SetSize': _GemRB.Window_SetSize,
@@ -110,8 +107,7 @@ class GWindow:
     return _GemRB.Window_GetControl(self.ID, control)
  
 
-class GControl:
-  __metaclass__ = metaControl
+class GControl(metaclass=metaControl):
   methods = {
     'GetRect': _GemRB.Control_GetRect,
     'HasAnimation': _GemRB.Control_HasAnimation,
@@ -128,21 +124,19 @@ class GControl:
   }
   def AttachScrollBar(self, scrollbar):
     if self.WinID != scrollbar.WinID:
-      raise RuntimeError, "Scrollbar must be in same Window as Control"
+      raise RuntimeError("Scrollbar must be in same Window as Control")
     return _GemRB.Control_AttachScrollBar(self.WinID, self.ID, scrollbar.ID)
   def SubstituteForControl(self, target):
 	  return _GemRB.Control_SubstituteForControl(self.WinID, self.ID, target.WinID, target.ID)
 
-class GLabel(GControl):
-  __metaclass__ = metaControl
+class GLabel(GControl,metaclass=metaControl):
   methods = {
     'SetFont': _GemRB.Label_SetFont,
     'SetTextColor': _GemRB.Label_SetTextColor,
     'SetUseRGB': _GemRB.Label_SetUseRGB
   }
 
-class GTextArea(GControl):
-  __metaclass__ = metaControl
+class GTextArea(GControl,metaclass=metaControl):
   methods = {
     'ChapterText': _GemRB.TextArea_SetChapterText,
     'Append': _GemRB.TextArea_Append,
@@ -156,21 +150,18 @@ class GTextArea(GControl):
     if varname:
     	self.SetVarAssoc(varname, val)
 
-class GTextEdit(GControl):
-  __metaclass__ = metaControl
+class GTextEdit(GControl,metaclass=metaControl):
   methods = {
     'SetBufferLength': _GemRB.TextEdit_SetBufferLength,
     'SetBackground': _GemRB.TextEdit_SetBackground
   }
 
-class GScrollBar(GControl):
-  __metaclass__ = metaControl
+class GScrollBar(GControl,metaclass=metaControl):
   methods = {
     'SetDefaultScrollBar': _GemRB.ScrollBar_SetDefaultScrollBar
   }
 
-class GButton(GControl):
-  __metaclass__ = metaControl
+class GButton(GControl,metaclass=metaControl):
   methods = {
     'SetSprites': _GemRB.Button_SetSprites,
     'SetOverlay': _GemRB.Button_SetOverlay,
@@ -196,15 +187,14 @@ class GButton(GControl):
     _GemRB.Button_CreateLabelOnButton(self.WinID, self.ID, control, *args)
     return _GemRB.Window_GetControl(self.WinID, control)
 
-class GWorldMap(GControl):
-  __metaclass__ = metaControl
+class GWorldMap(GControl,metaclass=metaControl):
   methods = {
     'AdjustScrolling': _GemRB.WorldMap_AdjustScrolling,
     'GetDestinationArea': _GemRB.WorldMap_GetDestinationArea,
     'SetTextColor': _GemRB.WorldMap_SetTextColor
   }
 
-class GSaveGame:
+class GSaveGame(metaclass=metaIDWrapper):
   __metaclass__ = metaIDWrapper
   methods = {
     'GetDate': _GemRB.SaveGame_GetDate,
@@ -215,6 +205,5 @@ class GSaveGame:
     'GetSaveID': _GemRB.SaveGame_GetSaveID,
   }
 
-class GSprite2D:
-  __metaclass__ = metaIDWrapper
+class GSprite2D(metaclass=metaIDWrapper):
   methods = {}

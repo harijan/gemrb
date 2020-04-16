@@ -71,7 +71,9 @@ public:
 		if (Holder<T>::ptr) {
 			Holder<T>::ptr->acquire();
 			GUIScript *gs = (GUIScript *) core->GetGUIScriptEngine();
-			PyObject *obj = PyCObject_FromVoidPtrAndDesc(Holder<T>::ptr,const_cast<TypeID*>(&T::ID),PyRelease);
+			PyObject *obj = PyCapsule_New(Holder<T>::ptr, "CObject.ptr", PyCapsuleRelease);
+			PyCapsule_SetContext(obj, const_cast<TypeID*>(&T::ID));
+			//PyObject *obj = PyCapsule_FromVoidPtrAndDesc(,,);
 			PyObject *tuple = PyTuple_New(1);
 			PyTuple_SET_ITEM(tuple, 0, obj);
 			PyObject *ret = gs->ConstructObject(T::ID.description, tuple);
@@ -91,12 +93,12 @@ public:
 			obj = id;
 		else
 			PyErr_Clear();
-		if (!PyCObject_Check(obj) || PyCObject_GetDesc(obj) != const_cast<TypeID*>(&T::ID)) {
-			Log(ERROR, "GUIScript", "Bad CObject extracted.");
+		if (!PyCapsule_CheckExact(obj) || PyCapsule_GetContext(obj) != const_cast<TypeID*>(&T::ID)) {
+			Log(ERROR, "GUIScript", "Bad Capsule extracted.");
 			Py_XDECREF(id);
 			return;
 		}
-		Holder<T>::ptr = static_cast<T*>(PyCObject_AsVoidPtr(obj));
+		Holder<T>::ptr = static_cast<T*>(PyCapsule_GetPointer(obj,"CObject.ptr"));
 		Holder<T>::ptr->acquire();
 		Py_XDECREF(id);
 	}
@@ -110,6 +112,10 @@ public:
 		return Holder<T>::ptr;
 	}
 private:
+	static void PyCapsuleRelease(PyObject *obj)
+	{
+		reinterpret_cast<T*>(obj)->release();
+	}
 	static void PyRelease(void *obj, void *desc)
 	{
 		if (desc != const_cast<TypeID*>(&T::ID)) {

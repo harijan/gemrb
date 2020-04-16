@@ -60,7 +60,7 @@ bool PythonObjectCallback<Control>::operator() (Control* ctrl)
 	PyObject *args = NULL;
 	PyObject* func_code = PyObject_GetAttrString(Function, "func_code");
 	PyObject* co_argcount = PyObject_GetAttrString(func_code, "co_argcount");
-	const int count = PyInt_AsLong(co_argcount);
+	const int count = PyLong_AsLong(co_argcount);
 	if (/*count*/ false) { // FIXME: this code is incomplete and would break things without being finished
 		assert(count == 1);
 		const char* type = "Control";
@@ -104,9 +104,9 @@ bool PythonObjectCallback<WindowKeyPress>::operator() (WindowKeyPress *wkp) {
 		return false;
 	}
 
-	PyObject *args = PyTuple_Pack(3, PyInt_FromLong(wkp->windowID),
-																	 PyInt_FromLong(wkp->key),
-																	 PyInt_FromLong(wkp->mod));
+	PyObject *args = PyTuple_Pack(3, PyLong_FromLong(wkp->windowID),
+																	 PyLong_FromLong(wkp->key),
+																	 PyLong_FromLong(wkp->mod));
 	long result = CallPythonWithReturn(Function, args);
 
 	return result > 0;
@@ -146,7 +146,7 @@ long CallPythonWithReturn(PyObject *Function, PyObject *args) {
 	PyObject *ret = CallPythonObject(Function, args);
 
 	if(ret) {
-		long value = PyInt_AsLong(ret);
+		long value = PyLong_AsLong(ret);
 		Py_DECREF(ret);
 
 		return value;

@@ -69,6 +69,7 @@
 # (To distribute this file outside of CMake, substitute the full
 #  License text for the above reference.)
 
+MESSAGE("sdl2 include dir .${SDLDIR}. .${CMAKE_SYSTEM_INCLUDE_PATH}. .${CMAKE_SYSTEM_PREFIX_PATH}.")
 find_path(SDL2_INCLUDE_DIR SDL.h
   HINTS
     ENV SDLDIR
@@ -77,6 +78,7 @@ find_path(SDL2_INCLUDE_DIR SDL.h
      ~/Library/Frameworks/
      /Library/Frameworks/
 )
+MESSAGE("sdl2 include dir .${SDL2_INCLUDE_DIR}.")
 
 find_library(SDL2_LIBRARY_TEMP
   NAMES SDL2

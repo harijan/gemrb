@@ -112,7 +112,7 @@ def GetActorPaperDoll (actor):
 		import GUICommonWindows
 		doll = GUICommonWindows.GetActorPaperDoll (actor) + "INV"
 		if not GemRB.HasResource (doll, RES_BAM):
-			print "GetActorPaperDoll: Missing paper doll for animation", row, which, doll
+			print("GetActorPaperDoll: Missing paper doll for animation" + str(row) + str(which) +str(doll))
 	return doll
 
 def SelectAllOnPress ():
@@ -230,7 +230,7 @@ def AddClassAbilities (pc, table, Level=1, LevelDiff=1, align=-1):
 				elif ab[:3] == "FA_":
 					Gain(10514, ab[3:])
 				else:
-					print "ERROR, unknown class ability (type): ", ab
+					print("ERROR, unknown class ability (type): " + str(ab))
 
 def MakeSpellCount (pc, spell, count):
 	have = GemRB.CountSpells (pc, spell, 1)
@@ -277,7 +277,7 @@ def RemoveClassAbilities (pc, table, Level):
 						# RemoveSpell will unmemorize them all too
 						GemRB.RemoveSpell (pc, IE_SPELL_TYPE_INNATE, 0, SpellIndex)
 				elif ab[:3] != "FA_" and ab[:3] != "FS_":
-					print "ERROR, unknown class ability (type): ", ab
+					print("ERROR, unknown class ability (type): " + str(ab))
 
 # PST uses a button, IWD2 two types, the rest are the same with two labels
 def SetEncumbranceLabels (Window, ControlID, Control2ID, pc, invert_colors = False):
@@ -297,7 +297,7 @@ def SetEncumbranceLabels (Window, ControlID, Control2ID, pc, invert_colors = Fal
 	else:
 		Control.SetText (str (encumbrance) + ":")
 		if not Control2ID: # shouldn't happen
-			print "Missing second control parameter to SetEncumbranceLabels!"
+			print("Missing second control parameter to SetEncumbranceLabels!")
 			return
 		Control2 = Window.GetControl (Control2ID)
 		Control2.SetText (str (max_encumb) + ":")
@@ -415,7 +415,7 @@ def GetClassRowName(value, which=-1):
 		elif which == "class":
 			Class = value
 		else:
-			raise RuntimeError, "Bad type parameter for GetClassRowName: ", which
+			raise RuntimeError("Bad type parameter for GetClassRowName: ", which)
 		ClassIndex = CommonTables.Classes.FindValue ("ID", Class)
 	ClassRowName = CommonTables.Classes.GetRowName (ClassIndex)
 	return ClassRowName
@@ -469,8 +469,8 @@ def IsDualClassed(actor, verbose):
 					SecondClassIndex = ClassIndex
 					break
 			else:
-				print "WARNING: Invalid dualclass combination, treating as a single class!"
-				print DualedFrom, Multi, KitIndex, FirstClassIndex
+				print("WARNING: Invalid dualclass combination, treating as a single class!")
+				print((DualedFrom, Multi, KitIndex, FirstClassIndex))
 				return (0,-1,-1)
 
 			if KittedClassIndex == FirstClassIndex and KitIndex:
@@ -574,7 +574,7 @@ def IsMultiClassed (actor, verbose):
 
 	# in case we couldn't figure out to which classes the multi belonged
 	if NumClasses < 2:
-		print "ERROR: couldn't figure out the individual classes of multiclass", ClassNames
+		print("ERROR: couldn't figure out the individual classes of multiclass", ClassNames)
 		return (0,-1,-1,-1)
 
 	# return the tuple
@@ -618,12 +618,12 @@ def CanDualClass(actor):
 
 	# cannot dc if all the columns of the DualClassTable are 0
 	if Sum == 0:
-		print "CannotDualClass: all the columns of the DualClassTable are 0"
+		print("CannotDualClass: all the columns of the DualClassTable are 0")
 		return 1
 
 	# if the only choice for dc is already the same as the actors base class
 	if Sum == 1 and ClassName in matches and KitIndex == 0:
-		print "CannotDualClass: the only choice for dc is already the same as the actors base class"
+		print("CannotDualClass: the only choice for dc is already the same as the actors base class")
 		return 1
 
 	AlignmentTable = GemRB.LoadTable ("alignmnt")
@@ -631,7 +631,7 @@ def CanDualClass(actor):
 	AlignmentColName = CommonTables.Aligns.FindValue (3, Alignment)
 	AlignmentColName = CommonTables.Aligns.GetValue (AlignmentColName, 4)
 	if AlignmentColName == -1:
-		print "CannotDualClass: extraordinary character alignment"
+		print("CannotDualClass: extraordinary character alignment")
 		return 1
 	Sum = 0
 	for classy in matches:
@@ -639,7 +639,7 @@ def CanDualClass(actor):
 
 	# cannot dc if all the available classes forbid the chars alignment
 	if Sum == 0:
-		print "CannotDualClass: all the available classes forbid the chars alignment"
+		print("CannotDualClass: all the available classes forbid the chars alignment")
 		return 1
 
 	# check current class' stat limitations
@@ -648,7 +648,7 @@ def CanDualClass(actor):
 		minimum = CurrentStatTable.GetValue (ClassStatIndex, stat)
 		name = CurrentStatTable.GetColumnName (stat)
 		if GemRB.GetPlayerStat (actor, SafeStatEval ("IE_" + name[4:]), 1) < minimum:
-			print "CannotDualClass: current class' stat limitations are too big"
+			print("CannotDualClass: current class' stat limitations are too big")
 			return 1
 
 	# check new class' stat limitations - make sure there are any good class choices
@@ -663,12 +663,12 @@ def CanDualClass(actor):
 				bad += 1
 				break
 	if len(matches) == bad:
-		print "CannotDualClass: no good new class choices"
+		print("CannotDualClass: no good new class choices")
 		return 1
 
 	# must be at least level 2
 	if GemRB.GetPlayerStat (actor, IE_LEVEL) == 1:
-		print "CannotDualClass: level 1"
+		print("CannotDualClass: level 1")
 		return 1
 	return 0
 

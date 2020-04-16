@@ -1679,6 +1679,7 @@ int Interface::Init(InterfaceConfig* config)
 	char strpath[_MAX_PATH];
 	PathJoin(strpath, GamePath, "dialog.tlk", NULL);
 	FileStream* fs = FileStream::OpenFile(strpath);
+	Log(MESSAGE, "Core", "%s", strpath);
 	if (!fs) {
 		Log(FATAL, "Core", "Cannot find Dialog.tlk.");
 		return GEM_ERROR;

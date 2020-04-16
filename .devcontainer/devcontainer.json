@@ -1,0 +1,46 @@
+// For format details, see https://aka.ms/vscode-remote/devcontainer.json or this file's README at:
+// https://github.com/microsoft/vscode-dev-containers/tree/v0.112.0/containers/docker-existing-dockerfile
+{
+	"name": "Existing Dockerfile",
+
+	// Sets the run context to one level up instead of the .devcontainer folder.
+	"context": "..",
+
+	// Update the 'dockerFile' property if you aren't using the standard 'Dockerfile' filename.
+	"dockerFile": "../Dockerfile",
+
+	// Set *default* container specific settings.json values on container create.
+	"settings": { 
+		"terminal.integrated.shell.linux": null
+	},
+
+	// Add the IDs of extensions you want installed when the container is created.
+	"extensions": [
+		"ms-vscode.cpptools",
+		"austin.code-gnu-global",
+		"ms-vscode.cmake-tools",
+		"ms-python.python",
+		"visualstudioexptteam.vscodeintellicode"
+	],
+
+	// Use 'forwardPorts' to make a list of ports inside the container available locally.
+	// "forwardPorts": [],
+
+	// Uncomment the next line to run commands after the container is created - for example installing git.
+	// "postCreateCommand": "apt-get update && apt-get install -y git",
+
+	// Uncomment when using a ptrace-based debugger like C++, Go, and Rust
+	// "runArgs": [ "--cap-add=SYS_PTRACE", "--security-opt", "seccomp=unconfined" ],
+	"runArgs": [ "--net=host", "--env=DISPLAY=:0", "--env=XDG_RUNTIME_DIR=/tmp/xdgr", "--device=/dev/snd",
+	"--env=PULSE_SERVER=tcp:127.0.0.1:34567" ],
+
+	// Uncomment to use the Docker CLI from inside the container. See https://aka.ms/vscode-remote/samples/docker-in-docker.
+	// "mounts": [ "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind" ],
+	"mounts": [ "source=/home/harry/GOG Games/Baldurs Gate 2 Complete/prefix/drive_c/GOG Games/Baldur's Gate 2,target=/workspaces/bg2,type=bind",
+				"source=/home/harry/.Xauthority,target=/root/.Xauthority:rw,type=bind",
+				"source=/dev/dri/,target=/dev/dri:rw,type=bind",
+				"source=/tmp/.X11-unix,target=/tmp/.X11-unix:rw,type=bind"],
+
+	// Uncomment to connect as a non-root user. See https://aka.ms/vscode-remote/containers/non-root.
+	// "remoteUser": "vscode"
+}

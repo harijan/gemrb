@@ -2849,10 +2849,11 @@ ieDword Actor::GetSpellFailure(bool arcana) const
 //dexterity AC (the lesser the better), do another negation for 3ED rules
 int Actor::GetDexterityAC() const
 {
+	/*
 	if (!third) {
 		return core->GetDexterityBonus(STAT_DEX_AC, GetStat(IE_DEX));
 	}
-
+	*/
 	int dexbonus = GetAbilityBonus(IE_DEX);
 	if (dexbonus) {
 		// the maximum dexterity bonus isn't stored,
@@ -2868,9 +2869,11 @@ int Actor::GetDexterityAC() const
 		}
 
 		//blindness negates the dexbonus
+		/*
 		if ((GetStat(IE_STATE_ID)&STATE_BLIND) && !HasFeat(FEAT_BLIND_FIGHT)) {
 			dexbonus = 0;
 		}
+		*/
 	}
 	return dexbonus;
 }
