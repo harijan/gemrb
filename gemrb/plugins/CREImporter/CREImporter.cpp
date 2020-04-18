@@ -1200,8 +1200,8 @@ void CREImporter::GetActorPST(Actor *act)
 		act->BaseStats[IE_COLORS+i] = tmpWord;
 	}
 	act->BaseStats[IE_COLORCOUNT] = tmpByte; //hack
-
-	str->Seek(31, GEM_CURRENT_POS);
+	str->Read(act->pstColorBytes, 10);
+	str->Seek(21, GEM_CURRENT_POS);
 	str->Read( &tmpByte, 1 );
 	act->BaseStats[IE_SPECIES]=tmpByte; // offset: 0x311
 	str->Read( &tmpByte, 1 );
@@ -1658,10 +1658,10 @@ void CREImporter::GetIWD2Spellpage(Actor *act, ieIWD2SpellType type, int level, 
 	ieDword memocount;
 	ieDword tmpDword;
 
-	int check = 0;
+	int check = 0, i = count;
 	CRESpellMemorization* sm = act->spellbook.GetSpellMemorization(type, level);
 	assert(sm && sm->SlotCount == 0 && sm->SlotCountWithBonus == 0); // unused
-	while(count--) {
+	while(i--) {
 		str->ReadDword(&spellindex);
 		str->ReadDword(&totalcount);
 		str->ReadDword(&memocount);
@@ -1701,13 +1701,13 @@ void CREImporter::GetIWD2Spellpage(Actor *act, ieIWD2SpellType type, int level, 
 	// hacks for domain spells, since their count is not stored and also always 1
 	// NOTE: luckily this does not cause save game incompatibility
 	str->ReadDword(&tmpDword);
-	if (type == IE_IWD2_SPELL_DOMAIN) {
+	if (type == IE_IWD2_SPELL_DOMAIN && count > 0) {
 		sm->SlotCount = 1;
 	} else {
 		sm->SlotCount = (ieWord) tmpDword;
 	}
 	str->ReadDword(&tmpDword);
-	if (type == IE_IWD2_SPELL_DOMAIN) {
+	if (type == IE_IWD2_SPELL_DOMAIN && count > 0) {
 		sm->SlotCountWithBonus = 1;
 	} else {
 		sm->SlotCountWithBonus = (ieWord) tmpDword;
@@ -1957,12 +1957,8 @@ void CREImporter::GetActorIWD2(Actor *act)
 	SpellMemorizationCount = 0;
 	MemorizedSpellsOffset = 0;
 	MemorizedSpellsCount = 0;
-	//6 bytes unknown, 600 bytes spellbook offsets
-	//skipping spellbook offsets
-	ieWord tmp1, tmp2, tmp3;
-	str->ReadWord( &tmp1);
-	str->ReadWord( &tmp2);
-	str->ReadWord( &tmp3);
+	// skipping class (probably redundant), class mask (calculated)
+	str->Seek(6, GEM_CURRENT_POS);
 	ieDword ClassSpellOffsets[8*9];
 
 	//spellbook spells
@@ -2788,7 +2784,8 @@ int CREImporter::PutActorPST(DataStream *stream, Actor *actor)
 		tmpWord = actor->BaseStats[IE_COLORS+i];
 		stream->WriteWord( &tmpWord);
 	}
-	stream->Write(filling,31);
+	stream->Write(actor->pstColorBytes, 10);
+	stream->Write(filling, 21);
 	tmpByte = actor->BaseStats[IE_SPECIES];
 	stream->Write( &tmpByte, 1);
 	tmpByte = actor->BaseStats[IE_TEAM];
@@ -2868,6 +2865,7 @@ int CREImporter::PutActorIWD2(DataStream *stream, Actor *actor)
 {
 	ieByte tmpByte;
 	ieWord tmpWord;
+	ieDword tmpDword;
 	int i;
 	char filling[124];
 
@@ -2918,10 +2916,11 @@ int CREImporter::PutActorIWD2(DataStream *stream, Actor *actor)
 	stream->Write( &tmpByte, 1);
 	stream->Write( filling,4); //this is called ID in iwd2, and contains 2 words
 	stream->Write( actor->GetScriptName(), 32);
-	//3 unknown words
-	stream->WriteWord( &tmpWord);
-	stream->WriteWord( &tmpWord);
-	stream->WriteWord( &tmpWord);
+	tmpByte = actor->BaseStats[IE_CLASS];
+	stream->Write(&tmpByte, 1);
+	stream->Write(filling, 1);
+	tmpDword = actor->GetClassMask();
+	stream->WriteDword(&tmpDword);
 	return 0;
 }
 

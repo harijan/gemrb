@@ -1441,7 +1441,7 @@ int Interface::Init(InterfaceConfig* config)
 
 	if ( StupidityDetector( CachePath )) {
 		Log(ERROR, "Core", "Cache path %s doesn't exist, not a folder or contains alien files!", CachePath );
-		return false;
+		return GEM_ERROR;
 	}
 	if (!KeepCache) DelTree((const char *) CachePath, false);
 
@@ -1571,6 +1571,8 @@ int Interface::Init(InterfaceConfig* config)
 		PathJoin( ChitinPath, GamePath, "chitin.key", NULL );
 		if (!gamedata->AddSource(ChitinPath, "chitin.key", PLUGIN_RESOURCE_KEY)) {
 			Log(FATAL, "Core", "Failed to load \"chitin.key\"");
+			Log(ERROR, "Core", "This means you set the GamePath config variable incorrectly or that the game is running (Windows only).");
+			Log(ERROR, "Core", "It must point to the game directory that holds a readable chitin.key");
 			return GEM_ERROR;
 		}
 	}
