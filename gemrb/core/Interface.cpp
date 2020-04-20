@@ -1236,7 +1236,7 @@ int Interface::LoadFonts()
 		}
 
 		Font* fnt = NULL;
-		ResourceHolder<FontManager> fntMgr(font_name);
+		ResourceHolder<FontManager> fntMgr = GetResourceHolder<FontManager>(font_name);
 		if (fntMgr) fnt = fntMgr->GetFont(font_size, font_style, pal);
 		gamedata->FreePalette(pal);
 
@@ -1579,7 +1579,7 @@ int Interface::Init(InterfaceConfig* config)
 
 	Log(MESSAGE, "Core", "Initializing GUI Script Engine...");
 	guiscript = PluginHolder<ScriptEngine>(IE_GUI_SCRIPT_CLASS_ID);
-	if (guiscript == NULL) {
+	if (guiscript == nullptr) {
 		Log(FATAL, "Core", "Missing GUI Script Engine.");
 		return GEM_ERROR;
 	}
@@ -1706,13 +1706,13 @@ int Interface::Init(InterfaceConfig* config)
 
 	{
 		Log(MESSAGE, "Core", "Loading Palettes...");
-		ResourceHolder<ImageMgr> pal16im(Palette16);
+		ResourceHolder<ImageMgr> pal16im = GetResourceHolder<ImageMgr>(Palette16);
 		if (pal16im)
 			pal16 = pal16im->GetImage();
-		ResourceHolder<ImageMgr> pal32im(Palette32);
+		ResourceHolder<ImageMgr> pal32im = GetResourceHolder<ImageMgr>(Palette32);
 		if (pal32im)
 			pal32 = pal32im->GetImage();
-		ResourceHolder<ImageMgr> pal256im(Palette256);
+		ResourceHolder<ImageMgr> pal256im = GetResourceHolder<ImageMgr>(Palette256);
 		if (pal256im)
 			pal256 = pal256im->GetImage();
 		if (!pal16 || !pal32 || !pal256) {
@@ -1738,7 +1738,7 @@ int Interface::Init(InterfaceConfig* config)
 	video->SetEventMgr( evntmgr );
 	Log(MESSAGE, "Core", "Initializing Window Manager...");
 	windowmgr = PluginHolder<WindowMgr>(IE_CHU_CLASS_ID);
-	if (windowmgr == NULL) {
+	if (windowmgr == nullptr) {
 		Log(FATAL, "Core", "Failed to load Window Manager.");
 		return GEM_ERROR;
 	}
@@ -1753,7 +1753,7 @@ int Interface::Init(InterfaceConfig* config)
 
 	Log(MESSAGE, "Core", "Starting up the Sound Driver...");
 	AudioDriver = ( Audio * ) PluginMgr::Get()->GetDriver(&Audio::ID, AudioDriverName.c_str());
-	if (AudioDriver == NULL) {
+	if (AudioDriver == nullptr) {
 		Log(FATAL, "Core", "Failed to load sound driver.");
 		return GEM_ERROR;
 	}
@@ -2750,8 +2750,8 @@ int Interface::CreateWindow(unsigned short WindowID, int XPos, int YPos, unsigne
 
 	Window* win = new Window( WindowID, (ieWord) XPos, (ieWord) YPos, (ieWord) Width, (ieWord) Height );
 	if (Background[0]) {
-		ResourceHolder<ImageMgr> mos(Background);
-		if (mos != NULL) {
+		ResourceHolder<ImageMgr> mos = GetResourceHolder<ImageMgr>(Background);
+		if (mos != nullptr) {
 			win->SetBackGround( mos->GetSprite2D(), true );
 		}
 	}
@@ -3514,7 +3514,7 @@ int Interface::PlayMovie(const char* ResRef)
 		}
 	}
 
-	ResourceHolder<MoviePlayer> mp(realResRef);
+	ResourceHolder<MoviePlayer> mp = GetResourceHolder<MoviePlayer>(realResRef);
 	if (!mp) {
 		gamedata->FreePalette(palette);
 		free(frames);
@@ -5143,7 +5143,7 @@ int Interface::SwapoutArea(Map *map)
 	}
 
 	PluginHolder<MapMgr> mm(IE_ARE_CLASS_ID);
-	if (mm == NULL) {
+	if (mm == nullptr) {
 		return -1;
 	}
 	int size = mm->GetStoredFileSize (map);
@@ -5177,7 +5177,7 @@ int Interface::WriteCharacter(const char *name, Actor *actor)
 		return -1;
 	}
 	PluginHolder<ActorMgr> gm(IE_CRE_CLASS_ID);
-	if (gm == NULL) {
+	if (gm == nullptr) {
 		return -1;
 	}
 
@@ -5208,7 +5208,7 @@ int Interface::WriteCharacter(const char *name, Actor *actor)
 int Interface::WriteGame(const char *folder)
 {
 	PluginHolder<SaveGameMgr> gm(IE_GAM_CLASS_ID);
-	if (gm == NULL) {
+	if (gm == nullptr) {
 		return -1;
 	}
 
@@ -5234,7 +5234,7 @@ int Interface::WriteGame(const char *folder)
 int Interface::WriteWorldMap(const char *folder)
 {
 	PluginHolder<WorldMapMgr> wmm(IE_WMP_CLASS_ID);
-	if (wmm == NULL) {
+	if (wmm == nullptr) {
 		return -1;
 	}
 
