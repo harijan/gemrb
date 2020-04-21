@@ -2569,7 +2569,7 @@ def BiographyPress():
 
 	BIO = GemRB.GetToken("Biography")
 	if BIO:
- 		BiographyField.SetText (BIO)
+		BiographyField.SetText (BIO)
 	else:
 		BiographyField.SetText (19423)
 
