@@ -169,7 +169,7 @@ def GiveEquipment(MyChar, ClassName, KitIndex):
 				realslot = GemRB.GetSlots (MyChar, -1, -1)
 
 			if realslot == (): # this shouldn't happen!
-				print "Eeek! No free slots for", item_resref
+				print("Eeek! No free slots for" + str(item_resref))
 				continue
 
 			# if an item contains a comma, the rest of the value is the stack
@@ -189,7 +189,7 @@ def GiveEquipment(MyChar, ClassName, KitIndex):
 			i = 1
 			item = GemRB.GetItem (item_resref)
 			if not item:
-				print "Error: could not find item", item_resref, "that is listed in 25stweap.2da"
+				print("Error: could not find item" + str(item_resref) + "that is listed in 25stweap.2da")
 				continue
 
 			if inventory_exclusion & item['Exclusion']:
@@ -205,7 +205,7 @@ def GiveEquipment(MyChar, ClassName, KitIndex):
 					i = i + 1
 
 			GemRB.CreateItem(MyChar, item_resref, targetslot, count, 0, 0)
- 			GemRB.ChangeItemFlag (MyChar, targetslot, IE_INV_ITEM_IDENTIFIED, OP_OR)
+			GemRB.ChangeItemFlag (MyChar, targetslot, IE_INV_ITEM_IDENTIFIED, OP_OR)
 			inventory_exclusion |= item['Exclusion']
 
 		return

@@ -112,7 +112,7 @@ def OpenOptionsWindow ():
 
 def TrySavingConfiguration():
 	if not GemRB.SaveConfig():
-		print "ARGH, could not write config to disk!!"
+		print("ARGH, could not write config to disk!!")
 
 ###################################################
 

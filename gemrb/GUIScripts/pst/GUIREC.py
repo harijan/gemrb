@@ -164,7 +164,7 @@ def UpdateRecordsWindow ():
 	
 	Window = RecordsWindow
 	if not RecordsWindow:
-		print "SelectionChange handler points to non existing window\n"
+		print("SelectionChange handler points to non existing window\n")
 		return
 
 	pc = GemRB.GameGetSelectedPCSingle ()
@@ -244,7 +244,7 @@ def UpdateRecordsWindow ():
 
 	# race
 	# HACK: for some strange reason, Morte's race is 1 (Human), instead of 45 (Morte)
-	print "species: %d  race: %d" %(GemRB.GetPlayerStat (pc, IE_SPECIES), GemRB.GetPlayerStat (pc, IE_RACE))
+	print("species: %d  race: %d", %(GemRB.GetPlayerStat (pc, IE_SPECIES), GemRB.GetPlayerStat (pc, IE_RACE)))
 	#be careful, some saves got this field corrupted
 	race = GemRB.GetPlayerStat (pc, IE_SPECIES) - 1
 

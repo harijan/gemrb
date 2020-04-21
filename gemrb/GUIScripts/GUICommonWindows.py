@@ -111,7 +111,7 @@ else: # Baldurs Gate, Icewind Dale
 # IsPage means whether the game should mark the button selected
 def InitOptionButton(Window, Index, Action=0,IsPage=1):
 	if not Window.HasControl(OptionControl[Index]):
-		print "InitOptionButton cannot find the button: " + Index
+		print("InitOptionButton cannot find the button: " + str(Index))
 		return
 
 	Button = Window.GetControl (OptionControl[Index])
@@ -342,7 +342,7 @@ def AIPress (toggle=1):
 	else:
 		Button = PortraitWindow.GetControl (OptionControl['AI'])
 
-	print "AIPress: GS_PARTYAI was:", GemRB.GetMessageWindowSize () & GS_PARTYAI, "at toggle:", toggle
+	print("AIPress: GS_PARTYAI was:" + str(GemRB.GetMessageWindowSize () & GS_PARTYAI) + "at toggle:" +str(toggle))
 	if toggle:
 		GemRB.GameSetScreenFlags (GS_PARTYAI, OP_XOR)
 
@@ -787,7 +787,7 @@ def UpdateActionsWindow ():
 		GemRB.SetVar ("Type", type)
 		Spellbook.SetupSpellIcons (CurrentWindow, type, TopIndex, ActionBarControlOffset)
 	else:
-		print "Invalid action level:", level
+		print("Invalid action level:" + str(level))
 		GemRB.SetVar ("ActionLevel", UAW_STANDARD)
 	return
 
@@ -910,7 +910,7 @@ def ActionRightPressed ():
 	pc = GemRB.GameGetFirstSelectedActor ()
 	TopIndex = GemRB.GetVar ("TopIndex")
 	Type = GemRB.GetVar ("Type")
-	print "Type:", Type
+	print("Type:" + str(Type))
 	#Type is a bitfield if there is no level given
 	#This is to make sure cleric/mages get all spells listed
 	if GemRB.GetVar ("ActionLevel") == UAW_ALLMAGE:
@@ -920,7 +920,7 @@ def ActionRightPressed ():
 			Max = GemRB.GetKnownSpellsCount (pc, Type, -1) # this can handle only one type at a time
 	else:
 		Max = GemRB.GetMemorizedSpellsCount(pc, Type, -1, 1)
-	print "Max:",Max
+	print("Max:" + str(Max))
 	TopIndex += 10
 	if TopIndex > Max - 10:
 		if Max>10:
@@ -1151,7 +1151,7 @@ def SpellShiftPressed ():
 	if SponCastTableName != "*":
 		SponCastTable = GemRB.LoadTable (SponCastTableName, 1)
 		if not SponCastTable:
-			print "SpellShiftPressed: skipping, non-existent spontaneous casting table used! ResRef:", SponCastTableName
+			print("SpellShiftPressed: skipping, non-existent spontaneous casting table used! ResRef:" + str(SponCastTableName))
 			SpellPressed ()
 			return
 
@@ -1401,7 +1401,7 @@ def GetPortraitButtonPairs (Window, ExtraSlots=0, Mode="vertical"):
 
 	if GameCheck.IsIWD2() or GameCheck.IsPST():
 		Mode = "horizontal"
-		print "Parties larger than 6 are currently not supported in IWD2 and PST! Using 6 ..."
+		print("Parties larger than 6 are currently not supported in IWD2 and PST! Using 6 ...")
 		return pairs
 
 	# GUIWORLD doesn't have a separate portraits window, so we need to skip
@@ -1431,7 +1431,7 @@ def GetPortraitButtonPairs (Window, ExtraSlots=0, Mode="vertical"):
 		# reduce it by existing slots + 0 slots in framed views (eg. inventory) and
 		# 1 in main game control (for spacing and any other controls below (ai/select all in bg2))
 		maxHeight = windowHeight - buttonHeight*6 - buttonHeight/2
-		#print "GetPortraitButtonPairs:", ScreenHeight, windowHeight, maxHeight
+		#print("GetPortraitButtonPairs:" + str(ScreenHeight) + str(windowHeight) + str(maxHeight))
 		if windowHeight != ScreenHeight:
 			maxHeight += buttonHeight/2
 		limit = maxHeight
@@ -1447,7 +1447,7 @@ def GetPortraitButtonPairs (Window, ExtraSlots=0, Mode="vertical"):
 
 	for i in range(len(pairs), PartySize):
 		if limitStep > limit:
-			raise SystemExit, "Not enough window space for so many party members (portraits), bailing out! %d vs width/height of %d/%d" %(limit, buttonWidth, buttonHeight)
+			raise SystemExit("Not enough window space for so many party members (portraits), bailing out! %d vs width/height of %d/%d", limit, buttonWidth, buttonHeight)
 		nextID = 1000 + i
 		if Window.HasControl (nextID):
 			pairs[i] = Window.GetControl (nextID)
@@ -1488,7 +1488,7 @@ def OpenPortraitWindow (needcontrols=0):
 		PortraitWindow = Window = GemRB.LoadWindow (1)
 
 	if needcontrols and not GameCheck.IsPST(): #not in pst
-		print "DEBUG:GUICommonWindows.OpenPortraitWindow:NEEDCONTROLS ON"
+		print("DEBUG:GUICommonWindows.OpenPortraitWindow:NEEDCONTROLS ON")
 		# 1280 and higher don't have this control
 		if Window.HasControl (8):
 			Button=Window.GetControl (8)
@@ -1720,7 +1720,7 @@ def UpdateAnimatedPortrait (Window,i):
 	Button.SetAnimation (pic, cycle)
 	ButtonHP.SetFlags(IE_GUI_BUTTON_PICTURE, OP_SET)
 
-	if hp_max < 1 or hp is "?":
+	if hp_max < 1 or hp == "?":
 		ratio = 0.0
 	else:
 		ratio = (hp + 0.0) / hp_max
@@ -1734,8 +1734,8 @@ def UpdateAnimatedPortrait (Window,i):
 	ButtonHP.SetBAM ('FILLBAR', 0, 0, -1)
 	ButtonHP.SetPictureClipping (ratio)
 
-	#print "PORTRAIT DEBUG:"
-	#print "state: " + str(state) + " hp: " + str(hp) + " hp_max: " + str(hp_max) + "ratio: " + str(ratio) + " cycle: " + str(cycle) + " state: " + str(state)
+	#print("PORTRAIT DEBUG:")
+	#print("state: " + str(state) + " hp: " + str(hp) + " hp_max: " + str(hp_max) + "ratio: " + str(ratio) + " cycle: " + str(cycle) + " state: " + str(state))
 
 	if GemRB.GetVar('Health Bar Settings') & (1 << i):
 		op = OP_OR

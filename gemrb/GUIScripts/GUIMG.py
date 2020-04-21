@@ -203,7 +203,7 @@ def UpdateMageWindow ():
 				Button.EnableBorder (0, ms['Flags'] == 0)
 				spell = GemRB.GetSpell (ms['SpellResRef'])
 				if not spell:
-					print "Missing memorised spell!", ms['SpellResRef']
+					print("Missing memorised spell!" + str(ms['SpellResRef']))
 					continue
 				Button.SetTooltip (spell['SpellName'])
 			else:
@@ -235,7 +235,7 @@ def UpdateMageWindow ():
 			Button.SetVarAssoc ("SpellButton", 100 + i)
 			spell = GemRB.GetSpell (ks['SpellResRef'])
 			if not spell:
-				print "Missing known spell!", ms['SpellResRef']
+				print("Missing known spell!" + str(ms['SpellResRef']))
 				continue
 			Button.SetTooltip (spell['SpellName'])
 		else:
@@ -483,7 +483,7 @@ def OpenSequencerWindow ():
 	p2 = GemRB.GetVar("P2")
 	Source = GemRB.GetSpellCastOn(pc)
 
-	print "Source: ", Source
+	print("Source: " + str(Source))
 	Target = p2>>16
 	Count = p2&255
 	if Count > 3:
@@ -689,7 +689,7 @@ def ContingencyOk ():
 		GemRB.ApplyEffect (pc, "CastSpellOnCondition", 0, GemRB.GetVar ("ContCond"), Spell1, Spell2, Spell3, Source)
 	#set the innate
 	if GemRB.LearnSpell (pc, Source+"d", LS_MEMO):
-		print "EEEEK! Failed to learn sequencer/contingency!\n\n"
+		print("EEEEK! Failed to learn sequencer/contingency!\n\n")
 	OtherWindow.Unload()
 	GUICommon.GameWindow.SetVisible (WINDOW_VISIBLE) # restores focus
 	return

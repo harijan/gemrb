@@ -286,10 +286,10 @@ def NextPress():
 		StatName = AbilityTable.GetRowName (i)
 		StatValue = GemRB.GetVar ("Ability "+str(i))
 		GemRB.SetPlayerStat (MyChar, StatID, StatValue)
-		print "\t",StatName,":\t", StatValue
+		print("\t" + str(StatName) + ":\t" + str(StatValue))
 
 	GemRB.SetPlayerStat (MyChar, IE_STREXTRA, GemRB.GetVar ("StrExtra"))
-	print "\tSTREXTRA:\t",GemRB.GetVar ("StrExtra")
+	print("\tSTREXTRA:\t" + str(GemRB.GetVar ("StrExtra")))
 
         GemRB.SetRepeatClickFlags(GEM_RK_DISABLE, OP_OR)
 

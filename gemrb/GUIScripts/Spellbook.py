@@ -61,7 +61,7 @@ def GetUsableMemorizedSpells(actor, BookType):
 			Spell['BookType'] = BookType # just another sorting key
 			Spell['SpellIndex'] = GemRB.GetSpelldataIndex (actor, Spell["SpellResRef"], 1<<BookType) # crucial!
 			if Spell['SpellIndex'] == -1:
-				print "Error, memorized spell not found!", Spell["SpellResRef"], 1<<BookType
+				print("Error, memorized spell not found!" + str(Spell["SpellResRef"]) + str(1<<BookType))
 			Spell['SpellIndex'] += 1000 * 1<<BookType
 			memorizedSpells.append (Spell)
 
@@ -305,7 +305,7 @@ def SetupSpellIcons(Window, BookType, Start=0, Offset=0):
 def GetIWD2Spells (kit, usability, level, baseClass = -1):
 	spells = []
 	if baseClass == -1:
-		print "Error, didn't pass a base class in iwd2!"
+		print("Error, didn't pass a base class in iwd2!")
 		return spells
 	# to use baseClass as a column index, we first need to convert it,
 	# since only casters are in the table. But only casters have spell stats too
@@ -407,7 +407,7 @@ def GetLearnableDomainSpells (pc, Level, baseClassName = -1):
 	# columns correspond to kits in the same order
 	KitIndex = GUICommonWindows.GetKitIndex (pc, BaseClassIndex)
 	if KitIndex == -1:
-		print "GetLearnableDomainSpells: couldn't determine the kit, bailing out!"
+		print("GetLearnableDomainSpells: couldn't determine the kit, bailing out!")
 		return Learnable
 	# calculate the offset from the first cleric kit
 	KitIndex -= CommonTables.Classes.FindValue ("CLASS", BaseClassIndex+1)
@@ -682,7 +682,7 @@ def LearnSpell(pc, spellref, booktype, level, count, flags=0):
 	if SpellIndex < 0:
 		ret = GemRB.LearnSpell (pc, spellref, flags, booktype)
 		if ret != LSR_OK and ret != LSR_KNOWN:
-			raise RuntimeError, "Failed learning spell: %s !" %(spellref)
+			raise RuntimeError("Failed learning spell: %s !", spellref)
 
 		SpellIndex = HasSpell (pc, booktype, level, spellref)
 		count -= 1
@@ -692,7 +692,7 @@ def LearnSpell(pc, spellref, booktype, level, count, flags=0):
 
 	if SpellIndex == -1:
 		# should never happen
-		raise RuntimeError, "LearnSpell: Severe spellbook problems: %s !" %(spellref)
+		raise RuntimeError("LearnSpell: Severe spellbook problems: %s !", spellref)
 
 	for j in range(count):
 		GemRB.MemorizeSpell (pc, booktype, level, SpellIndex, flags&LS_MEMO)

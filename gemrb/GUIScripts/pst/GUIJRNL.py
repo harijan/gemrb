@@ -247,7 +247,7 @@ def EvaluateQuest (index):
 			if not completed: break
 
 		if completed:
-			#print "COMPLETED", suff
+			#print("COMPLETED" + str(suff))
 			desc = GemRB.GetINIQuestsKey (tag, 'descCompleted' + suff, '0')
 			return (1, desc)
 
@@ -265,7 +265,7 @@ def EvaluateQuest (index):
 		if not assigned: break
 
 	if assigned:
-		#print "ASSIGNED"
+		#print("ASSIGNED")
 		desc = GemRB.GetINIQuestsKey (tag, 'descAssigned', '0')
 		return (0, desc)
 

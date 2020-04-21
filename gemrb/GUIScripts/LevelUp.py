@@ -107,17 +107,17 @@ def OpenLevelUpWindow():
 	# class
 	Label = LevelUpWindow.GetControl (0x10000000+106)
 	Label.SetText (GUICommon.GetActorClassTitle (pc))
-	print "Title:",GUICommon.GetActorClassTitle (pc),"\tActor Title:",actor.ClassTitle()
+	print("Title:" + str(GUICommon.GetActorClassTitle (pc)) + "\tActor Title:" + str(actor.ClassTitle()))
 
 	Class = GemRB.GetPlayerStat (pc, IE_CLASS)
-	print "Class:",Class,"\tActor Class:",actor.classid
+	print("Class:" + str(Class) + "\tActor Class:" + str(actor.classid))
 	SkillTable = GemRB.LoadTable("skills")
 
 	# kit
 	ClassName = GUICommon.GetClassRowName (Class, "class")
 	Kit = GUICommon.GetKitIndex (pc)
-	print "Kit:", Kit, "\tActor Kit:",actor.KitIndex()
-	print "ClassName:",ClassName,"\tActor ClassNames:",actor.ClassNames()
+	print("Kit:" + str(Kit) + "\tActor Kit:" + str(actor.KitIndex()))
+	print("ClassName:" + str(ClassName) + "\tActor ClassNames:" + str(actor.ClassNames()))
 
 	# need this for checking gnomes
 	RaceName = GemRB.GetPlayerStat (pc, IE_RACE, 1)
@@ -164,7 +164,7 @@ def OpenLevelUpWindow():
 		# store a boolean for IsDual
 		IsDual = IsDual[0] > 0
 
-	print "NumClasses:",NumClasses,"\tActor NumClasses:",actor.NumClasses()
+	print("NumClasses:" + str(NumClasses) + "\tActor NumClasses:" + str(actor.NumClasses()))
 
 	Level = [0]*3
 	LevelDiff = [0]*3
@@ -183,8 +183,8 @@ def OpenLevelUpWindow():
 		else:
 			Level[1] = GemRB.GetPlayerStat (pc, IE_LEVEL2)
 
-	print "Classes:",Classes,"\tActor Classes:",actor.Classes()
-	print "IsDual:",IsDual>0,"\tActor IsDual",actor.isdual
+	print("Classes:" + str(Classes) + "\tActor Classes:" + str(actor.Classes()))
+	print("IsDual:" + str(IsDual>0) + "\tActor IsDual" + str(actor.isdual))
 
 	hp = 0
 	HaveCleric = 0
@@ -198,7 +198,7 @@ def OpenLevelUpWindow():
 
 	# get a bunch of different things each level
 	for i in range(NumClasses):
-#		print "Class:",Classes[i]
+#		print("Class:" + str(Classes[i]))
 		# we don't care about the current level, but about the to-be-achieved one
 		# get the next level
 		Level[i] = LUCommon.GetNextLevelFromExp (GemRB.GetPlayerStat (pc, IE_XP)/NumClasses, Classes[i])
@@ -215,8 +215,8 @@ def OpenLevelUpWindow():
 		elif i == 2:
 			LevelDiff[i] = Level[i] - GemRB.GetPlayerStat (pc, IE_LEVEL3)
 
-#		print "Level (",i,"):",Level[i]
-#		print "Level Diff (",i,"):",LevelDiff[i]
+#		print("Level (" + str(i) + "):" + str(Level[i]))
+#		print("Level Diff (" + str(i) + "):" + str(LevelDiff[i]))
 
 		# save our current and next spell amounts
 		StartLevel = Level[i] - LevelDiff[i]
@@ -281,9 +281,9 @@ def OpenLevelUpWindow():
 #		if ABTable != "*" and GemRB.HasResource (ABTable, RES_2DA, 1):
 #			GUICommon.AddClassAbilities (pc, ABTable, Level[i], LevelDiff[i])
 
-	print "Actor CurrentLevels:",actor.Levels()
-	print "Levels:",Level,"Actor NextLevels:",actor.NextLevels()
-	print "LevelDiffs:",LevelDiff,"Actor LevelDiffs:",actor.LevelDiffs()
+	print("Actor CurrentLevels:" + str(actor.Levels()))
+	print("Levels:" + str(Level) + "Actor NextLevels:" + str(actor.NextLevels()))
+	print("LevelDiffs:" + str(LevelDiff) + "Actor LevelDiffs:" + str(actor.LevelDiffs()))
 
 	#update our saves, thaco, hp and lore
 	LUCommon.SetupSavingThrows (pc, Level)
@@ -314,10 +314,10 @@ def OpenLevelUpWindow():
 		HLATable = GemRB.LoadTable("lunumab")
 		# we need to check each level against a multi value (this is kinda screwy)
 		if actor.multiclass:
-			print "Actor HLA Names:",["MULTI"+str(actor.NumClasses())+name \
-				for name in actor.ClassNames()]
+			print("Actor HLA Names:" + ["MULTI"+str(actor.NumClasses())+name \
+				for name in actor.ClassNames()])
 		else:
-			print "Actor HLA Names:",actor.ClassNames()
+			print("Actor HLA Names:" + str(actor.ClassNames()))
 
 		for i in range (NumClasses):
 			if IsMulti:
@@ -588,7 +588,7 @@ def LevelUpDonePress():
 		GemRB.SetPlayerStat (pc, IE_LEVEL2, Level[1])
 	GemRB.SetPlayerStat (pc, IE_LEVEL3, Level[2])
 
-	print "Levels:",Level[0],"/",Level[1],"/",Level[2]
+	print("Levels:" + str(Level[0]) + "/" + str(Level[1]) + "/" + str(Level[2]))
 
 	# save our number of memorizable spells per level
 	if DeltaWSpells > 0:
@@ -628,9 +628,9 @@ def LevelUpDonePress():
 
 	# 5261 - Regained abilities from inactive class
 	if IsDual: # we're dual classed
-		print "activation?"
+		print("activation?")
 		if (Level[0] - LevelDiff[0]) <= Level[1] and Level[0] > Level[1]: # our new classes now surpasses our old class
-			print "reactivating base class"
+			print("reactivating base class")
 			ReactivateBaseClass ()
 
 	if LevelUpWindow:
@@ -685,7 +685,7 @@ def ReactivateBaseClass ():
 		NewProf = Value & 0x07
 		if OldProf > NewProf:
 			Value = (OldProf << 3) | OldProf
-			print "Value:",Value
+			print("Value:" + str(Value))
 			if GameCheck.IsBG2():
 				GemRB.ApplyEffect (pc, "Proficiency", Value, ProfID )
 			else:

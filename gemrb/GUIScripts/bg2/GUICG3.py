@@ -107,9 +107,9 @@ def NextPress():
 		GemRB.GameSetReputation (Rep)
 
 	# diagnostic output
-	print "CharGen5 output:"
-	print "\tAlignment: ",Alignment
-	print "\tReputation: ",Rep
+	print("CharGen5 output:")
+	print("\tAlignment: " + str(Alignment))
+	print("\tReputation: " + str(Rep))
 
 	GemRB.SetNextScript("CharGen5") #appearance
 	return

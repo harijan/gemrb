@@ -24,12 +24,12 @@ def unsetPlayer():
 	return False
 
 def unsetGender():
-	#print "unset Gender"
+	#print("unset Gender")
 	MyChar = GemRB.GetVar ("Slot")
 	GemRB.SetPlayerStat (MyChar, IE_SEX, 0)
 
 def unsetPortrait():
-	#print "unset Portrait"
+	#print("unset Portrait")
 	GemRB.SetToken("SmallPortrait","")
 	GemRB.SetToken("LargePortrait","")
 

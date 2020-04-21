@@ -600,7 +600,7 @@ def WeaponOfHand(pc, combatdet, dualwielding, left=0):
 	slot = combatdet["Slot"]
 	slot_item = GemRB.GetSlotItem (pc, slot, 1)
 	if not slot_item:
-		print "ARGHH, no slot item at slot %d, bailing out!" %(combatdet["Slot"])
+		print("ARGHH, no slot item at slot %d, bailing out!" + str((combatdet["Slot"])))
 		return
 	item = GemRB.GetItem (slot_item["ItemResRef"])
 	ammo = None

@@ -370,7 +370,7 @@ def AcceptPress():
 	if MyChar == 1:
 		GemRB.GameSetReputation (t)
 
-	print "Reputation", t
+	print("Reputation" + str(t))
 	TmpTable = GemRB.LoadTable ("strtgold")
 	a = TmpTable.GetValue (ClassName, "ROLLS") #number of dice
 	b = TmpTable.GetValue (ClassName, "SIDES") #size
@@ -1035,7 +1035,7 @@ def ClassMultiPress():
 	RaceRow = CommonTables.Races.FindValue (3, GemRB.GetPlayerStat (MyChar, IE_RACE) )
 	RaceName = CommonTables.Races.GetRowName (RaceRow)
 
-	print "Multi racename:", RaceName
+	print("Multi racename:" +str(RaceName))
 	for i in range (2, 10):
 		ClassMultiSelectButton = ClassMultiWindow.GetControl (i)
 		ClassMultiSelectButton.SetFlags (IE_GUI_BUTTON_RADIOBUTTON, OP_SET)

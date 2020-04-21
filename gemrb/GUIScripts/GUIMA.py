@@ -336,7 +336,7 @@ def OpenWorldMapWindowInside ():
 
 	OpenMapWindow () #closes mapwindow
 	MapWindow = -1
-	print "MapWindow=",MapWindow
+	print("MapWindow=" + str(MapWindow))
 	WorldMapWindowCommon (-1)
 	return
 

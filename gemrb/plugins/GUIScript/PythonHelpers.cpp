@@ -58,7 +58,7 @@ bool PythonObjectCallback<Control>::operator() (Control* ctrl)
 	}
 
 	PyObject *args = NULL;
-	PyObject* func_code = PyObject_GetAttrString(Function, "func_code");
+	PyObject* func_code = PyObject_GetAttrString(Function, "__code__");
 	PyObject* co_argcount = PyObject_GetAttrString(func_code, "co_argcount");
 	const int count = PyLong_AsLong(co_argcount);
 	if (/*count*/ false) { // FIXME: this code is incomplete and would break things without being finished

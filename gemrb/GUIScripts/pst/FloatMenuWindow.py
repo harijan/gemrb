@@ -71,7 +71,7 @@ type = None
 def UseSpell ():
 	pc = GemRB.GameGetFirstSelectedPC ()
 	slot = float_menu_selected+float_menu_index
-	print "spell", type, slot
+	print("spell" + str(type) + str(slot))
 	GemRB.SpellCast (pc, 1<<type, slot)
 	return
 

@@ -445,7 +445,7 @@ def UnmemoSpell (index, onlydepleted=False):
 		GemRB.PlaySound ("GAM_44")
 		FlashOverButton (index + 6)
 	else:
-		print "Spell unmemorization failed, huh?", pc, type, level, index, onlydepleted
+		print("Spell unmemorization failed, huh?" + str(pc) + str(type) + str(level) + str(index) + str(onlydepleted))
 
 	RefreshSpellBookLevel (False)
 	UpdateSpellBookWindow ()

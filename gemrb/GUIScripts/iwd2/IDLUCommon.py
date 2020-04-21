@@ -83,7 +83,7 @@ def SetupSavingThrows (pc, Class, Chargen=False):
 	SaveName = CommonTables.Classes.GetValue (RowName, "SAVE", GTV_STR)
 	ClassSaveTable = GemRB.LoadTable (SaveName)
 	if Level+1 > ClassSaveTable.GetRowCount():
-		print "SetupSavingThrows: too high level, ignoring!"
+		print("SetupSavingThrows: too high level, ignoring!")
 		return
 
 	# save the saves

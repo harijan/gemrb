@@ -140,14 +140,14 @@ class CharGen:
 		self.window = CharGenWindow
 	
 	def unset(self,stage):
-		#print "unset" , stage
+		#print("unset" + str(stage))
 		if(len(self.stages[stage]) == 5):
 			(name,setFn,commentFn,unsetFn,guard) = self.stages[stage]
 			if(unsetFn != None):
 				unsetFn()
 	#set next script to for step, return false if the current step should be skipped
 	def setScript(self):
-		#print 'set',self.step
+		#print('set' + str(self.step))
 		if(len(self.stages[self.step]) == 5): #long record: script of function
 			(name,setFn,commentFn,unsetFn,guardFn) = self.stages[self.step]
 			if(guardFn and not guardFn()):
@@ -252,7 +252,7 @@ def ImportPress():
 def BackPress():
 	"""Moves to the previous step."""
 	global CharGenMaster
-	print "back"
+	print("back")
 	GemRB.SetRepeatClickFlags(GEM_RK_DISABLE, OP_OR)
 	CharGenMaster.back()
 	

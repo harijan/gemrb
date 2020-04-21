@@ -45,7 +45,7 @@ def OnLoad():
 	AbilityCount = AbilityTable.GetRowCount ()
 
 	# print our diagnostic as we loop (so as not to duplicate)
-	print "CharGen6 output:"
+	print("CharGen6 output:")
 
 	#remove all known spells and nullify the memorizable counts
 	Spellbook.RemoveKnownSpells (MyChar, IE_SPELL_TYPE_WIZARD, 1,9, 1)

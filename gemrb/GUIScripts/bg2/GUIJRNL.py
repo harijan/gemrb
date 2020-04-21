@@ -166,7 +166,7 @@ def UpdateLogWindow ():
 	# CurrentChapter
 	Label = JournalWindow.GetControl (5)
 	Label.SetText (15873)
-	print "Chapter ", Chapter, "Section ", Section
+	print("Chapter " + str(Chapter) + "Section " + str(Section))
 
 	Text = Window.GetControl (1)
 
