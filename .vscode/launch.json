@@ -5,6 +5,14 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Python: Attach (Remote debugging)",
+            "type": "python",
+            "request": "attach",
+            "port": 3000,
+            "host": "127.0.0.1"
+        },
+
+        {
             "name": "(gdb) Launch",
             "type": "cppdbg",
             "request": "launch",

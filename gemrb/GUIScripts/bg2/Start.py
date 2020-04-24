@@ -36,6 +36,15 @@ def EndTest():
 def OnLoad():
 	global StartWindow, skip_videos
 
+	#debugging
+	import ptvsd
+
+	# Allow other computers to attach to ptvsd at this IP address and port.
+	ptvsd.enable_attach(address=('0.0.0.0', 3000), redirect_output=True)
+
+	# Pause the program until a remote debugger is attached
+	ptvsd.wait_for_attach()
+
 	# check if we're just running the game-entering test
 	if os and os.getenv('GEMRB_TEST', "0") != "0":
 		import threading

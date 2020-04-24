@@ -2063,7 +2063,7 @@ def UpdateClock ():
 		if Clock and (Clock.HasAnimation("CGEAR") or GameCheck.IsIWD2()):
 			Hours = (GemRB.GetGameTime () % 7200) / 300
 			GUICommon.SetGamedaysAndHourToken ()
-			Clock.SetBAM ("CDIAL", 0, (Hours + 12) % 24)
+			Clock.SetBAM ("CDIAL", 0, int((Hours + 12) % 24))
 			Clock.SetTooltip (GemRB.GetString (16041)) # refetch the string, since the tokens changed
 
 def CheckLevelUp(pc):

@@ -291,6 +291,8 @@ def SetupProfsWindow (pc, type, window, callback, level1=[0,0,0], level2=[1,1,1]
 	#correct the profs left if we can't assign that much
 	if ProfsPointsLeft > ProfsAssignable:
 		ProfsPointsLeft = ProfsAssignable
+	ProfsPointsLeft = int(ProfsPointsLeft)
+	#print("ProfsPointsLeft: " + str(ProfsPointsLeft) + " type: " + type(ProfsPointsLeft))
 	GemRB.SetVar ("ProfsPointsLeft", ProfsPointsLeft)
 
 	# setup the +/- and info controls
