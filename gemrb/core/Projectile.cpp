@@ -33,7 +33,7 @@
 #include "Sprite2D.h"
 #include "VEFObject.h"
 #include "Video.h"
-#include "RNG/RNG_SFMT.h"
+#include "RNG.h"
 #include "Scriptable/Actor.h"
 
 #include <cmath>
@@ -79,11 +79,13 @@ Projectile::Projectile()
 	ZPos = 0;
 	extension_delay = 0;
 	Range = 0;
-	RGB = ColorSpeed = Shake = TFlags = Seq1 = Seq2 = Speed = SFlags = ExtFlags = 0;
+	RGB = ColorSpeed = Shake = TFlags = Seq1 = Seq2 = ExtFlags = 0;
 	IDSType = IDSValue = IDSType2 = IDSValue2 = StrRef = 0;
 	LightX = LightY = LightZ = Aim = type = SparkColor = 0;
 	SmokeSpeed = SmokeAnimID = Caster = Target = Level = 0;
 	extension_explosioncount = extension_targetcount = 0;
+	Speed = 20;
+	SFlags = PSF_FLYING;
 	memset(&tint, 0, sizeof(tint));
 	if (!server)
 		server = core->GetProjectileServer();
@@ -293,6 +295,7 @@ void Projectile::CreateIteration()
 	pro->SetCaster(Caster, Level);
 	if (ExtFlags&PEF_CURVE) {
 		pro->bend=bend+1;
+		pro->Speed = Speed; // fix the different speed of MAGICMIS.pro compared to SPMAGMIS.pro
 	}
 
 	if (FakeTarget) {
@@ -443,7 +446,7 @@ void Projectile::Setup()
 		ZPos = FLY_HEIGHT;
 	}
 	phase = P_TRAVEL;
-	travel_handle = core->GetAudioDrv()->Play(SoundRes1, SFX_CHAN_MISSILE,
+	travel_handle = core->GetAudioDrv()->Play(FiringSound, SFX_CHAN_MISSILE,
 				Pos.x, Pos.y, (SFlags & PSF_LOOPING ? GEM_SND_LOOPING : 0));
 
 	//create more projectiles
@@ -667,7 +670,7 @@ void Projectile::UpdateSound()
 		StopSound();
 	}
 	if (!travel_handle || !travel_handle->Playing()) {
-		travel_handle = core->GetAudioDrv()->Play(SoundRes2, SFX_CHAN_MISSILE,
+		travel_handle = core->GetAudioDrv()->Play(ArrivalSound, SFX_CHAN_MISSILE,
 				Pos.x, Pos.y, (SFlags & PSF_LOOPING2 ? GEM_SND_LOOPING : 0));
 		SFlags|=PSF_SOUND2;
 	}
@@ -1038,6 +1041,7 @@ int Projectile::CalculateTargetFlag()
 {
 	//if there are any, then change phase to exploding
 	int flags = GA_NO_DEAD|GA_NO_UNSCHEDULED;
+	bool checkingEA = false;
 
 	if (Extension) {
 		if (Extension->AFlags&PAF_NO_WALL) {
@@ -1063,6 +1067,9 @@ int Projectile::CalculateTargetFlag()
 		default:
 			return flags;
 		}
+		if (Extension->AFlags & PAF_TARGET) {
+			checkingEA = true;
+		}
 
 		//this is the only way to affect neutrals and enemies
 		if (Extension->APFlags&APF_INVERT_TARGET) {
@@ -1070,8 +1077,8 @@ int Projectile::CalculateTargetFlag()
 		}
 	}
 
-	Actor *caster = area->GetActorByGlobalID(Caster);
-	if (caster && ((Actor *) caster)->GetStat(IE_EA)<EA_GOODCUTOFF) {
+	Scriptable *caster = area->GetScriptableByGlobalID(Caster);
+	if (caster && (!checkingEA || (caster->Type == ST_ACTOR && ((Actor *) caster)->GetStat(IE_EA) < EA_GOODCUTOFF))) {
 		return flags;
 	}
 
@@ -1506,6 +1513,18 @@ void Projectile::DrawExplosion(const Region &screen)
 				//quick hack to use the single object envelope
 				area->AddVVCell(new VEFObject(vvc));
 			}
+			// bg2 comet has the explosion split into two vvcs, with just a starting cycle difference
+			// until we actually need two vvc fields in the extension, let's just hack around it
+			if (!stricmp(Extension->VVCRes, "SPCOMEX1")) {
+				ScriptedAnimation* vvc = gamedata->GetScriptedAnimation("SPCOMEX2", false);
+				if (vvc) {
+					vvc->XPos += Pos.x;
+					vvc->YPos += Pos.y;
+					vvc->PlayOnce();
+					vvc->SetBlend();
+					area->AddVVCell(new VEFObject(vvc));
+				}
+			}
 		}
 		
 		phase=P_EXPLODING2;
@@ -1893,6 +1912,11 @@ void Projectile::StaticTint(const Color &newtint)
 {
 	tint = newtint;
 	TFlags &= ~PTF_TINT; //turn off area tint
+}
+
+int Projectile::GetPhase() const
+{
+	return phase;
 }
 
 void Projectile::Cleanup()

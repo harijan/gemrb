@@ -97,6 +97,17 @@ def GetKnownSpells(actor, BookType):
 
 	return knownSpells
 
+def GetKnownSpellsDescription(actor, BookType):
+	""" Gets text to display in the chargen spell listing. """
+
+	info = ""
+	spells = GetKnownSpells (actor, BookType)
+	# reverse spells order grouped by SpellLevel
+	spells.sort (lambda fst, snd: -1 if fst['SpellLevel'] == snd['SpellLevel'] else 0)
+	for spell in spells:
+		info += GemRB.GetString (spell['SpellName']) + "\n"
+	return info
+
 def GetKnownSpellsLevel(actor, BookType, level):
 	knownSpells = []
 	spellResRefs = []
@@ -260,7 +271,7 @@ def SetupSpellIcons(Window, BookType, Start=0, Offset=0):
 		# see splspec.2da for all the reasons; silence is handled elsewhere
 		specialSpell = GemRB.CheckSpecialSpell(actor, Spell['SpellResRef'])
 		specialSpell = (specialSpell & SP_IDENTIFY) or ((specialSpell & SP_SURGE) and actionLevel == UAW_ALLMAGE)
-		if specialSpell & SP_SILENCE and Spell['HeaderFlags'] & 0x20000: # SF_IGNORES_SILENCE
+		if specialSpell & SP_SILENCE and Spell['HeaderFlags'] & 0x2000000: # SF_IGNORES_SILENCE
 			specialSpell ^= SP_SILENCE
 		if specialSpell or (disabled_spellcasting&spellType):
 			Button.SetState (IE_GUI_BUTTON_DISABLED)
@@ -451,7 +462,8 @@ def GetLearnablePriestSpells (Class, Alignment, Level, booktype=0):
 	return Learnable
 
 # there is no separate druid spell table in the originals
-#FIXME: try to do this in a non-hard way?
+# however Tweaks Anthology adds it for all other games and EE does the same
+# so we can't just change the value in the tables and be done with it
 def GetPriestSpellTable(tablename):
 	if GameCheck.IsIWD2():
 		return tablename # no need for this folly
@@ -614,7 +626,8 @@ def RemoveKnownSpells (pc, type, level1=1, level2=1, noslots=0, kit=0):
 
 		# make sure that we get the original kit, if we have one
 		if kit:
-			originalkit = GetKitIndex (pc)
+			import GUICommon
+			originalkit = GUICommon.GetKitIndex (pc)
 
 			if originalkit: # kitted; find the class value
 				originalkit = CommonTables.KitList.GetValue (originalkit, 7)

@@ -58,10 +58,10 @@ If you're a web developer, check the website [reports](https://github.com/gemrb/
 
 1. GemRB comes with a bundled demo, but it is trivial. The challenge is to enhance it, but
 a lot of (compatibly licensed) art is missing. See also the docs on
-[creating a new game](http://www.gemrb.org/wiki/doku.php?id=newgame:newgame)
+[creating a new game](https://gemrb.org/New-game.html)
 
 2. Some GemRB mods are in the [gemrb-mods repo](https://github.com/lynxlynxlynx/gemrb-mods).
-The [mod idea page](http://www.gemrb.org/wiki/doku.php?id=developers:mods) also lists 
+The [mod idea page](https://gemrb.org/Modding.html) also lists
 several ideas from simple tweaks to more complex mods.  If you know WeiDU, a good task would be to add
 more of the documented tweaks (idea page) to the tweakpack.
 
@@ -123,8 +123,8 @@ so we can improve our process and documentation!
 
 ## Useful links
 - [IESDP](https://gibberlings3.github.io/iesdp/), 
-- [engine overview](http://www.gemrb.org/wiki/doku.php?id=engine:start), 
-- [GUIScript documentation](http://www.gemrb.org/wiki/doku.php?id=documentation),
+- [engine overview](https://gemrb.org/Engine-overview.html),
+- [GUIScript documentation](https://gemrb.org/GUIScript/Index.html),
 - [plaintext dumps](http://lynxlynx.info/ie/string-dumps.zip) of game strings with matching strrefs,
 - the buildbots are accessible through any PR or commit
 - the tools mentioned in the README links section
@@ -154,9 +154,12 @@ to display diffs of included binary files (spells and other overrides).
 ## Version tracking
 
 1. Split your changes (commits) into well-rounded units of logic (`git commit -p` can help).
-2. Each commit should compile and run. You can do quick fixups with `git commit --amend -p`.
-3. Commit messages should be descriptive (why is more important than what, include area/creature/script names if possible).
-4. Rebasing and force pushing to pull request branches is fine.
+2. Read the commit diff to verify you're commiting what you think. That indentation matches
+   and that no extraneous changes are included (eg. random style changes from bad IDE settings).
+3. Each commit should compile and run. You can do quick fixups with `git commit --amend -p`.
+4. Commit messages should be descriptive (why is more important than what, include
+   area/creature/script names if possible).
+5. Rebasing and force pushing to pull request branches is fine.
 
 All of this makes reviewing and bisecting for regressions easier.
 
@@ -201,15 +204,12 @@ You can check what we're working towards in the current release by reading the
 NEWS file and, as far as bugtracker backlog goes, by looking at the version's
 [milestone](https://github.com/gemrb/gemrb/milestones).
 
-The plan for 0.8.7 is to make the subviews branch ready for release.
-It will also mark the switch to the C++11 standard. Once the branch is
-merged, we can also start working on the port to python3. Naturally the
-release will contain also other unrelated fixes, so just look at the tracker.
-The first priority is to fix the issues tagged with "subviews" and thoroughly
-test it out.
+The plan for 0.8.8 is to make the subviews branch ready for release.
+Once the branch is merged, we can also start working on the port to python3.
+Naturally the release will contain also other unrelated fixes, so just look at
+the tracker. The first priority is to fix the issues tagged with "subviews" and
+thoroughly test it out.
 
-Since it is in a branch, the subviews windowing rewrite (and more) is not
-bound to any release, so work can continue independently. Due to the volume
-of changes and the merge&refactoring problems they introduce,
-making it ready for prime time is the **single most important TODO item**.
-Any help in stabilising the branch is greatly appreciated!
+Due to the volume of changes and the merge&refactoring problems they introduce,
+making the subviews branch ready for prime time is the **single most important
+TODO item**. Any help in stabilising the branch is greatly appreciated!

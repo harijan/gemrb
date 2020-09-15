@@ -45,6 +45,8 @@ namespace GemRB {
 //-------------------------------------------------------------
 // Trigger Functions
 //-------------------------------------------------------------
+// bg1 and bg2 have some dead bcs code - perhaps the first implementation
+// of morale, since the uses suggest being able to detect panic
 int GameScript::BreakingPoint(Scriptable* Sender, Trigger* /*parameters*/)
 {
 	int value=GetHappiness(Sender, core->GetGame()->Reputation );
@@ -1240,10 +1242,16 @@ int GameScript::HaveSpell(Scriptable *Sender, Trigger *parameters)
 	if (Sender->Type!=ST_ACTOR) {
 		return 0;
 	}
+
+	if (parameters->int0Parameter == 0 && Sender->LastMarkedSpell == 0) {
+		return false;
+	}
+
 	Actor *actor = (Actor *) Sender;
 	if (parameters->string0Parameter[0]) {
 		return actor->spellbook.HaveSpell(parameters->string0Parameter, 0);
 	}
+	if (!parameters->int0Parameter) parameters->int0Parameter = Sender->LastMarkedSpell;
 	return actor->spellbook.HaveSpell(parameters->int0Parameter, 0);
 }
 
@@ -1495,6 +1503,9 @@ int GameScript::Range(Scriptable* Sender, Trigger* parameters)
 	if (Sender->GetCurrentArea() != scr->GetCurrentArea()) {
 		return 0;
 	}
+	if (Sender->Type == ST_ACTOR) {
+		Sender->LastMarked = scr->GetGlobalID();
+	}
 	int distance = SquaredMapDistance(Sender, scr);
 	return DiffCore(distance, (parameters->int0Parameter+1)*(parameters->int0Parameter+1), parameters->int1Parameter);
 }
@@ -1632,7 +1643,7 @@ int GameScript::Disarmed(Scriptable* Sender, Trigger* parameters)
 //stealing from a store failed, owner triggered
 int GameScript::StealFailed(Scriptable* Sender, Trigger* parameters)
 {
-	return Sender->MatchTriggerWithObject(trigger_disarmfailed, parameters->objectParameter);
+	return Sender->MatchTriggerWithObject(trigger_stealfailed, parameters->objectParameter);
 }
 
 int GameScript::PickpocketFailed(Scriptable* Sender, Trigger* parameters)
@@ -2183,8 +2194,6 @@ int GameScript::SetSpellTarget(Scriptable* Sender, Trigger* parameters)
 		scr->LastTargetPos.empty();
 		return 1;
 	}
-	scr->LastTarget = 0;
-	scr->LastTargetPersistent = 0;
 	scr->LastTargetPos.empty();
 	scr->LastSpellTarget = tar->GetGlobalID();
 	return 1;
@@ -2233,21 +2242,10 @@ int GameScript::IsSpellTargetValid(Scriptable* Sender, Trigger* parameters)
 //Always manages to set spell to 0, otherwise it sets if there was nothing set earlier
 int GameScript::SetMarkedSpell_Trigger(Scriptable* Sender, Trigger* parameters)
 {
-	if (Sender->Type != ST_ACTOR) {
-		return 0;
-	}
-	Actor *scr = (Actor *) Sender;
-	if (parameters->int0Parameter) {
-		if (scr->LastMarkedSpell) {
-			return 1;
-		}
-		if (!scr->spellbook.HaveSpell(parameters->int0Parameter, 0) ) {
-			return 1;
-		}
-	}
-
-	//TODO: check if spell exists (not really important)
-	scr->LastMarkedSpell = parameters->int0Parameter;
+	Action *params = new Action(true);
+	params->int0Parameter = parameters->int0Parameter;
+	GameScript::SetMarkedSpell(Sender, params);
+	delete params;
 	return 1;
 }
 
@@ -2274,14 +2272,6 @@ int GameScript::IsMarkedSpell(Scriptable* Sender, Trigger* parameters)
 int GameScript::See(Scriptable* Sender, Trigger* parameters)
 {
 	int see = SeeCore(Sender, parameters, 0);
-	//don't mark LastSeen for clear!!!
-	if (Sender->Type==ST_ACTOR && see) {
-		Actor *act = (Actor *) Sender;
-		//save lastseen as lastmarked
-		//FIXME: what is this doing?
-		act->LastMarked = act->LastSeen;
-		//Sender->AddTrigger (&act->LastSeen);
-	}
 	return see;
 }
 
@@ -2882,28 +2872,9 @@ int GameScript::AreaRestDisabled(Scriptable* Sender, Trigger* /*parameters*/)
 	return 0;
 }
 
-//new optional parameter: size of actor (to reach target)
-int GameScript::TargetUnreachable(Scriptable* Sender, Trigger* parameters)
+int GameScript::TargetUnreachable(Scriptable* Sender, Trigger* /*parameters*/)
 {
-	Scriptable* tar = GetActorFromObject( Sender, parameters->objectParameter );
-	if (!tar || tar->Type != ST_ACTOR) {
-		return 1; //well, if it doesn't exist it is unreachable
-	}
-	Map *map=Sender->GetCurrentArea();
-	if (!map) {
-		return 1;
-	}
-	unsigned int size = parameters->int0Parameter;
-
-	if (!size) {
-		if (Sender->Type==ST_ACTOR) {
-			size = ((Movable *) Sender)->size;
-		}
-		else {
-			size = 1;
-		}
-	}
-	return map->TargetUnreachable( Sender->Pos, tar->Pos, size);
+	return Sender->MatchTrigger(trigger_targetunreachable);
 }
 
 int GameScript::PartyCountEQ(Scriptable* /*Sender*/, Trigger* parameters)
@@ -3348,7 +3319,12 @@ int GameScript::IsFacingObject(Scriptable* Sender, Trigger* parameters)
 
 int GameScript::AttackedBy(Scriptable* Sender, Trigger* parameters)
 {
-	return Sender->MatchTriggerWithObject(trigger_attackedby, parameters->objectParameter, parameters->int0Parameter);
+	bool match = Sender->MatchTriggerWithObject(trigger_attackedby, parameters->objectParameter, parameters->int0Parameter);
+	Scriptable *target = GetActorFromObject(Sender, parameters->objectParameter);
+	if (match && target && Sender->Type == ST_ACTOR) {
+		Sender->LastMarked = target->GetGlobalID();
+	}
+	return match;
 }
 
 int GameScript::TookDamage(Scriptable* Sender, Trigger* /*parameters*/)
@@ -3413,21 +3389,31 @@ int GameScript::HelpEX(Scriptable* Sender, Trigger* parameters)
 		case 7: stat = IE_ALIGNMENT; break;
 		default: return 0;
 	}
+	bool match = false;
 	if (stat == IE_CLASS) {
-		return actor->GetActiveClass() == help->GetActiveClass();
+		match = actor->GetActiveClass() == help->GetActiveClass();
 	} else if (actor->GetStat(stat) == help->GetStat(stat)) {
 		// FIXME
 		//Sender->AddTrigger(&actor->LastHelp);
-		return 1;
+		match = true;
 	}
-	return 0;
+	if (match && Sender->Type == ST_ACTOR) {
+		Sender->LastMarked = actor->GetGlobalID();
+	}
+	return match;
 }
 
 int GameScript::Help_Trigger(Scriptable* Sender, Trigger* parameters)
 {
-	return Sender->MatchTriggerWithObject(trigger_help, parameters->objectParameter);
+	 bool match = Sender->MatchTriggerWithObject(trigger_help, parameters->objectParameter);
+	 Scriptable* target = GetActorFromObject(Sender, parameters->objectParameter);
+	 if (match && target && Sender->Type == ST_ACTOR) {
+		 Sender->LastMarked = target->GetGlobalID();
+	 }
+	 return match;
 }
 
+// a few values are named in order.ids
 int GameScript::ReceivedOrder(Scriptable* Sender, Trigger* parameters)
 {
 	return Sender->MatchTriggerWithObject(trigger_receivedorder, parameters->objectParameter, parameters->int0Parameter);
@@ -3525,11 +3511,21 @@ int GameScript::Vacant(Scriptable* Sender, Trigger* /*parameters*/)
 	if (Sender->Type!=ST_AREA) {
 		return 0;
 	}
-	Map *map = (Map *) Sender;
-	if ( map->CanFree() ) {
-		return 1;
+	const Map *map = (Map *) Sender;
+	// map->CanFree() has side effects, don't use it here! Would make some loot and corpses disappear immediately
+	int i = map->GetActorCount(true);
+	while (i--) {
+		const Actor *actor = map->GetActor(i, true);
+		bool usedExit = actor->GetInternalFlag() & IF_USEEXIT;
+		if (actor->IsPartyMember()) {
+			if (!usedExit) {
+				return 0;
+			}
+		} else if (usedExit) {
+			return 0;
+		}
 	}
-	return 0;
+	return 1;
 }
 
 //this trigger always checks the right hand weapon?
@@ -3652,7 +3648,7 @@ int GameScript::PCCanSeePoint( Scriptable* /*Sender*/, Trigger* parameters)
 	return 0;
 }
 
-//i'm clueless about this trigger
+// I'm clueless about this trigger ... but it looks fine, pst dgaoha.d is the only user
 int GameScript::StuffGlobalRandom( Scriptable* Sender, Trigger* parameters)
 {
 	unsigned int max=parameters->int0Parameter+1;
@@ -3881,7 +3877,7 @@ int GameScript::TimeOfDay(Scriptable* /*Sender*/, Trigger* parameters)
 	return 0;
 }
 
-//this is a PST action, it's using delta, not diffmode
+//this is a PST action, it's using delta.ids, not diffmode.ids
 int GameScript::RandomStatCheck(Scriptable* Sender, Trigger* parameters)
 {
 	Scriptable* tar = GetActorFromObject( Sender, parameters->objectParameter );
@@ -4333,10 +4329,9 @@ int GameScript::NumBouncingSpellLevel(Scriptable* Sender, Trigger* parameters)
 	}
 	Actor *actor = (Actor *) tar;
 
-	int bounceCount = 0;
+	unsigned int bounceCount = 0;
 	if (actor->fxqueue.HasEffectWithPower(fx_level_bounce_ref, parameters->int0Parameter)) {
-		// FIXME: cheating, probably doesn't matter
-		bounceCount = 0xFFFF;
+		bounceCount = 0xFFFFFFFF;
 	} else {
 		Effect *fx = actor->fxqueue.HasEffectWithPower(fx_level_bounce_dec_ref, parameters->int0Parameter);
 		if (fx) {
@@ -4344,7 +4339,7 @@ int GameScript::NumBouncingSpellLevel(Scriptable* Sender, Trigger* parameters)
 		}
 	}
 
-	return bounceCount == parameters->int1Parameter;
+	return bounceCount == (unsigned) parameters->int1Parameter;
 }
 
 int GameScript::NumBouncingSpellLevelGT(Scriptable* Sender, Trigger* parameters)
@@ -4355,10 +4350,9 @@ int GameScript::NumBouncingSpellLevelGT(Scriptable* Sender, Trigger* parameters)
 	}
 	Actor *actor = (Actor *) tar;
 
-	int bounceCount = 0;
+	unsigned int bounceCount = 0;
 	if (actor->fxqueue.HasEffectWithPower(fx_level_bounce_ref, parameters->int0Parameter)) {
-		// FIXME: cheating, probably doesn't matter
-		bounceCount = 0xFFFF;
+		bounceCount = 0xFFFFFFFF;
 	} else {
 		Effect *fx = actor->fxqueue.HasEffectWithPower(fx_level_bounce_dec_ref, parameters->int0Parameter);
 		if (fx) {
@@ -4366,7 +4360,7 @@ int GameScript::NumBouncingSpellLevelGT(Scriptable* Sender, Trigger* parameters)
 		}
 	}
 
-	return bounceCount > parameters->int1Parameter;
+	return bounceCount > (unsigned) parameters->int1Parameter;
 }
 
 int GameScript::NumBouncingSpellLevelLT(Scriptable* Sender, Trigger* parameters)
@@ -4377,10 +4371,9 @@ int GameScript::NumBouncingSpellLevelLT(Scriptable* Sender, Trigger* parameters)
 	}
 	Actor *actor = (Actor *) tar;
 
-	int bounceCount = 0;
+	unsigned int bounceCount = 0;
 	if (actor->fxqueue.HasEffectWithPower(fx_level_bounce_ref, parameters->int0Parameter)) {
-		// FIXME: cheating, probably doesn't matter
-		bounceCount = 0xFFFF;
+		bounceCount = 0xFFFFFFFF;
 	} else {
 		Effect *fx = actor->fxqueue.HasEffectWithPower(fx_level_bounce_dec_ref, parameters->int0Parameter);
 		if (fx) {
@@ -4388,7 +4381,7 @@ int GameScript::NumBouncingSpellLevelLT(Scriptable* Sender, Trigger* parameters)
 		}
 	}
 
-	return bounceCount < parameters->int1Parameter;
+	return bounceCount < (unsigned) parameters->int1Parameter;
 }
 
 /* Returns true if the target creature specified by Object is protected from spells of power Level.
@@ -4420,10 +4413,9 @@ int GameScript::NumImmuneToSpellLevel(Scriptable* Sender, Trigger* parameters)
 	}
 	Actor *actor = (Actor *) tar;
 
-	int bounceCount = 0;
+	unsigned int bounceCount = 0;
 	if (actor->fxqueue.HasEffectWithPower(fx_level_immunity_ref, parameters->int0Parameter)) {
-		// FIXME: cheating, probably doesn't matter
-		bounceCount = 0xFFFF;
+		bounceCount = 0xFFFFFFFF;
 	} else {
 		Effect *fx = actor->fxqueue.HasEffectWithPower(fx_level_immunity_dec_ref, parameters->int0Parameter);
 		if (fx) {
@@ -4431,7 +4423,7 @@ int GameScript::NumImmuneToSpellLevel(Scriptable* Sender, Trigger* parameters)
 		}
 	}
 
-	return bounceCount == parameters->int1Parameter;
+	return bounceCount == (unsigned) parameters->int1Parameter;
 }
 
 int GameScript::NumImmuneToSpellLevelGT(Scriptable* Sender, Trigger* parameters)
@@ -4442,10 +4434,9 @@ int GameScript::NumImmuneToSpellLevelGT(Scriptable* Sender, Trigger* parameters)
 	}
 	Actor *actor = (Actor *) tar;
 
-	int bounceCount = 0;
+	unsigned int bounceCount = 0;
 	if (actor->fxqueue.HasEffectWithPower(fx_level_immunity_ref, parameters->int0Parameter)) {
-		// FIXME: cheating, probably doesn't matter
-		bounceCount = 0xFFFF;
+		bounceCount = 0xFFFFFFFF;
 	} else {
 		Effect *fx = actor->fxqueue.HasEffectWithPower(fx_level_immunity_dec_ref, parameters->int0Parameter);
 		if (fx) {
@@ -4453,7 +4444,7 @@ int GameScript::NumImmuneToSpellLevelGT(Scriptable* Sender, Trigger* parameters)
 		}
 	}
 
-	return bounceCount > parameters->int1Parameter;
+	return bounceCount > (unsigned) parameters->int1Parameter;
 }
 
 int GameScript::NumImmuneToSpellLevelLT(Scriptable* Sender, Trigger* parameters)
@@ -4464,10 +4455,9 @@ int GameScript::NumImmuneToSpellLevelLT(Scriptable* Sender, Trigger* parameters)
 	}
 	Actor *actor = (Actor *) tar;
 
-	int bounceCount = 0;
+	unsigned int bounceCount = 0;
 	if (actor->fxqueue.HasEffectWithPower(fx_level_immunity_ref, parameters->int0Parameter)) {
-		// FIXME: cheating, probably doesn't matter
-		bounceCount = 0xFFFF;
+		bounceCount = 0xFFFFFFFF;
 	} else {
 		Effect *fx = actor->fxqueue.HasEffectWithPower(fx_level_immunity_dec_ref, parameters->int0Parameter);
 		if (fx) {
@@ -4475,7 +4465,7 @@ int GameScript::NumImmuneToSpellLevelLT(Scriptable* Sender, Trigger* parameters)
 		}
 	}
 
-	return bounceCount < parameters->int1Parameter;
+	return bounceCount < (unsigned) parameters->int1Parameter;
 }
 
 // Compares the number of ticks left of time stop to Number.

@@ -101,6 +101,7 @@ def OpenSaveWindow ():
 
 	ScrollBar = Window.GetControl (ctrl_offset[5])
 	ScrollBar.SetEvent (IE_GUI_SCROLLBAR_ON_CHANGE, ScrollBarPress)
+	GUICommon.SetSaveDir ()
 	Games = GemRB.GetSaveGames ()
 	TopIndex = max (0, len(Games) - num_rows + 1) #one more for the 'new game'
 	GemRB.SetVar ("TopIndex",TopIndex)
@@ -127,7 +128,7 @@ def ScrollBarPress():
 
 		if ActPos < len(Games):
 			Slotname = Games[ActPos].GetName()
-			Slottime = Games[ActPos].GetDate ()
+			Slottime = Games[ActPos].GetGameDate ()
 			Button2.SetState (IE_GUI_BUTTON_ENABLED)
 		elif ActPos == len(Games):
 			Slotname = strs['empty']
@@ -160,6 +161,7 @@ def ScrollBarPress():
 
 def QuickSavePressed():
 	Slot = 1
+	GUICommon.SetSaveDir ()
 
 	if GameCheck.IsTOB():
 		Slot = 4

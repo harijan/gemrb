@@ -34,6 +34,7 @@
 #include "Interface.h"
 #include "PolymorphCache.h" // fx_polymorph
 #include "Projectile.h" //needs for clearair
+#include "RNG.h"
 #include "ScriptedAnimation.h"
 #include "ScriptEngine.h"
 #include "Spell.h" //needed for fx_cast_spell feedback
@@ -94,8 +95,6 @@ static ieResRef *casting_glows = NULL;
 static int cgcount = -1;
 static ieResRef *spell_hits = NULL;
 static int shcount = -1;
-static int *spell_abilities = NULL;
-static ieDword splabcount = 0;
 static int *polymorph_stats = NULL;
 static int polystatcount = 0;
 
@@ -856,8 +855,6 @@ static void Cleanup()
 {
 	core->FreeResRefTable(casting_glows, cgcount);
 	core->FreeResRefTable(spell_hits, shcount);
-	if(spell_abilities) free(spell_abilities);
-	spell_abilities=NULL;
 	if(polymorph_stats) free(polymorph_stats);
 	polymorph_stats=NULL;
 }
@@ -961,7 +958,7 @@ static void Resurrect(Scriptable *Owner, Actor *target, Effect *fx, Point &p)
 	if (area && target->GetCurrentArea()!=area) {
 		MoveBetweenAreasCore(target, area->GetScriptName(), p, fx->Parameter2, true);
 	}
-	target->Resurrect();
+	target->Resurrect(p);
 }
 
 
@@ -1421,7 +1418,7 @@ int fx_death (Scriptable* /*Owner*/, Actor* target, Effect* fx)
 	ieDword damagetype = 0;
 	switch (fx->Parameter2) {
 	case 1:
-		BASE_STATE_SET(STATE_FLAME); //not sure, should be charred
+		if (!target->GetStat(IE_DISABLECHUNKING)) BASE_STATE_SET(STATE_FLAME); //not sure, should be charred
 		damagetype = DAMAGE_FIRE;
 		break;
 	case 2:
@@ -1431,9 +1428,10 @@ int fx_death (Scriptable* /*Owner*/, Actor* target, Effect* fx)
 		damagetype = DAMAGE_CRUSHING;
 		break;
 	case 8:
-		// TODO: also play "GORE.WAV" / "GORE2.WAV"
 		// Actor::CheckOnDeath handles the actual chunking
 		damagetype = DAMAGE_CRUSHING|DAMAGE_CHUNKING;
+		// bg1 & iwds have this file, bg2 & pst none
+		core->GetAudioDrv()->Play("GORE", SFX_CHAN_HITS, target->Pos.x, target->Pos.y);
 		break;
 	case 16:
 		BASE_STATE_SET(STATE_PETRIFIED);
@@ -1444,12 +1442,15 @@ int fx_death (Scriptable* /*Owner*/, Actor* target, Effect* fx)
 		damagetype = DAMAGE_COLD;
 		break;
 	case 64:
-		BASE_STATE_SET(STATE_PETRIFIED);
+		if (!target->GetStat(IE_DISABLECHUNKING)) BASE_STATE_SET(STATE_PETRIFIED);
 		damagetype = DAMAGE_CRUSHING|DAMAGE_CHUNKING;
+		// file only in iwds
+		core->GetAudioDrv()->Play("GORE2", SFX_CHAN_HITS, target->Pos.x, target->Pos.y);
 		break;
 	case 128:
-		BASE_STATE_SET(STATE_FROZEN);
+		if (!target->GetStat(IE_DISABLECHUNKING)) BASE_STATE_SET(STATE_FROZEN);
 		damagetype = DAMAGE_COLD|DAMAGE_CHUNKING;
+		core->GetAudioDrv()->Play("GORE2", SFX_CHAN_HITS, target->Pos.x, target->Pos.y);
 		break;
 	case 256:
 		damagetype = DAMAGE_ELECTRICITY;
@@ -1462,11 +1463,17 @@ int fx_death (Scriptable* /*Owner*/, Actor* target, Effect* fx)
 		damagetype = DAMAGE_ACID;
 	}
 
+	if (target->GetStat(IE_DISABLECHUNKING)) {
+		damagetype &= ~DAMAGE_CHUNKING;
+	}
+
 	if (damagetype!=DAMAGE_COLD) {
 		//these two bits are turned off on death
 		BASE_STATE_CURE(STATE_FROZEN|STATE_PETRIFIED);
 	}
-	BASE_SET(IE_MORALE, 10);
+	if (target->ShouldModifyMorale()) {
+		BASE_SET(IE_MORALE, 10);
+	}
 
 	// don't give xp in cutscenes
 	bool giveXP = true;
@@ -1494,44 +1501,13 @@ int fx_cure_frozen_state (Scriptable* /*Owner*/, Actor* target, Effect* fx)
 }
 
 // 0x0F DexterityModifier
-
-#define CSA_DEX 0
-#define CSA_STR 1
-#define CSA_CNT 2
-static int SpellAbilityDieRoll(Actor *target, int which)
-{
-	if (which>=CSA_CNT) return 6;
-
-	ieDword cls = target->GetActiveClass();
-	if (!spell_abilities) {
-		AutoTable tab("clssplab");
-		if (!tab) {
-			spell_abilities = (int *) malloc(sizeof(int)*CSA_CNT);
-			for (int ab=0;ab<CSA_CNT;ab++) {
-				spell_abilities[ab*splabcount]=6;
-			}
-			splabcount=1;
-			return 6;
-		}
-		splabcount = tab->GetRowCount();
-		spell_abilities=(int *) malloc(sizeof(int)*splabcount*CSA_CNT);
-		for (int ab=0;ab<CSA_CNT;ab++) {
-			for (ieDword i=0;i<splabcount;i++) {
-				spell_abilities[ab*splabcount+i]=atoi(tab->QueryField(i,ab));
-			}
-		}
-	}
-	if (cls>=splabcount) cls=0;
-	return spell_abilities[which*splabcount+cls];
-}
-
 int fx_dexterity_modifier (Scriptable* /*Owner*/, Actor* target, Effect* fx)
 {
 	if(0) print("fx_dexterity_modifier(%2d): Mod: %d, Type: %d", fx->Opcode, fx->Parameter1, fx->Parameter2);
 
 	////how cat's grace: value is based on class
 	if (fx->Parameter2==3) {
-		fx->Parameter1 = core->Roll(1,SpellAbilityDieRoll(target,0),0);
+		fx->Parameter1 = core->Roll(1, gamedata->GetSpellAbilityDie(target, 0), 0);
 		fx->Parameter2 = 0;
 	}
 
@@ -1813,7 +1789,7 @@ int fx_morale_modifier (Scriptable* /*Owner*/, Actor* target, Effect* fx)
 {
 	if(0) print("fx_morale_modifier(%2d): Mod: %d, Type: %d", fx->Opcode, fx->Parameter1, fx->Parameter2);
 
-	if (STAT_GET(IE_STATE_ID) & STATE_BERSERK) {
+	if (STATE_GET(STATE_BERSERK)) {
 		return FX_NOT_APPLIED;
 	}
 
@@ -1824,7 +1800,9 @@ int fx_morale_modifier (Scriptable* /*Owner*/, Actor* target, Effect* fx)
 		return FX_NOT_APPLIED;
 	}
 
-	STAT_MOD( IE_MORALE );
+	if (target->ShouldModifyMorale()) {
+		STAT_MOD(IE_MORALE);
+	}
 	return FX_APPLIED;
 }
 
@@ -2247,7 +2225,7 @@ int fx_strength_modifier (Scriptable* /*Owner*/, Actor* target, Effect* fx)
 	////how strength: value is based on class
 	////pst power of one also depends on this!
 	if (fx->Parameter2==3) {
-		fx->Parameter1 = core->Roll(1,SpellAbilityDieRoll(target,1),0);
+		fx->Parameter1 = core->Roll(1, gamedata->GetSpellAbilityDie(target, 1), 0);
 		fx->Parameter2 = 0;
 	}
 
@@ -3898,6 +3876,22 @@ int fx_movement_modifier (Scriptable* /*Owner*/, Actor* target, Effect* fx)
 	//definitely a bug
 	if (target->HasSpellState(SS_AEGIS)) return FX_NOT_APPLIED;
 
+	// bg1 crashes on 13+, 9&10 are equal to 8 and 11 (boots of speed) equals to roughly 15.6 #129
+	if (core->HasFeature(GF_BREAKABLE_WEAPONS) && fx->Parameter2 == MOD_ABSOLUTE) {
+		switch (fx->Parameter1) {
+			case 9:
+			case 10:
+				fx->Parameter1 = 8;
+				break;
+			case 11:
+			case 30:
+				fx->Parameter1 = 15;
+				break;
+			default:
+				break;
+		}
+	}
+
 	ieDword value = target->GetStat(IE_MOVEMENTRATE);
 	STAT_MOD(IE_MOVEMENTRATE);
 	if (value < target->GetStat(IE_MOVEMENTRATE)) {
@@ -4046,7 +4040,7 @@ int fx_set_bless_state (Scriptable* /*Owner*/, Actor* target, Effect* fx)
 	target->SetSpellState(SS_BLESS);
 	target->ToHit.HandleFxBonus(fx->Parameter1, fx->TimingMode==FX_DURATION_INSTANT_PERMANENT);
 	STAT_ADD( IE_DAMAGEBONUS, fx->Parameter1);
-	STAT_ADD( IE_MORALEBREAK, fx->Parameter1);
+	if (target->ShouldModifyMorale()) STAT_ADD(IE_MORALE, fx->Parameter1);
 	if (core->HasFeature(GF_ENHANCED_EFFECTS)) {
 		target->AddPortraitIcon(PI_BLESS);
 		target->SetColorMod(0xff, RGBModifier::ADD, 30, 0xc0, 0x80, 0);
@@ -4305,7 +4299,7 @@ int fx_display_string (Scriptable* /*Owner*/, Actor* target, Effect* fx)
 		//TODO: create a single list reader that handles src and 2da too
 		SrcVector *rndstr=LoadSrc(fx->Resource);
 		if (rndstr) {
-			fx->Parameter1 = rndstr->at(rand()%rndstr->size());
+			fx->Parameter1 = rndstr->at(RAND(0, rndstr->size() - 1));
 			FreeSrc(rndstr, fx->Resource);
 			DisplayStringCore(target, fx->Parameter1, DS_HEAD);
 			*(ieDword *) &target->overColor=fx->Parameter2;
@@ -4355,7 +4349,6 @@ int fx_casting_glow (Scriptable* Owner, Actor* target, Effect* fx)
 		sca->YPos+=fx->PosY+ypos_by_direction[target->GetOrientation()];
 		sca->ZPos+=heightmod;
 		sca->SetBlend();
-		sca->PlayOnce();
 		if (fx->Duration) {
 			sca->SetDefaultDuration(fx->Duration-core->GetGame()->GameTime);
 		} else {
@@ -4860,6 +4853,11 @@ int fx_cure_hold_state (Scriptable* /*Owner*/, Actor* target, Effect* fx)
 }
 
 // 0xa3 FreeAction
+// if needed, make this match bg2 behaviour more closely: it removed 0x7e (126) effects with duration/permanent
+// and param2 == MOD_ABSOLUTE IF the modified movement rate is lower than the original. This is, of course,
+// crap. It should remove individual 0x7e effects if they lower the movement rate (or remove all of them, which
+// is what we do now).
+// NOTE: it didn't remove 0xb0 effects, so perhaps fx_movement_modifier_ref needs to be changed to refer to 0x7e
 int fx_cure_slow_state (Scriptable* /*Owner*/, Actor* target, Effect* fx)
 {
 	if(0) print("fx_cure_slow_state(%2d): Mod: %d, Type: %d", fx->Opcode, fx->Parameter1, fx->Parameter2);
@@ -5428,7 +5426,7 @@ int fx_ignore_dialogpause_modifier (Scriptable* /*Owner*/, Actor* target, Effect
 int fx_familiar_constitution_loss (Scriptable* /*Owner*/, Actor* target, Effect* fx)
 {
 	if(0) print("fx_familiar_constitution_loss(%2d): Loss: %d", fx->Opcode,(signed) fx->Parameter1);
-	if (! (STAT_GET(IE_STATE_ID)&STATE_NOSAVE)) {
+	if (!STATE_GET(STATE_NOSAVE)) {
 		return FX_APPLIED;
 	}
 	Effect *newfx;
@@ -5485,7 +5483,7 @@ int fx_familiar_marker (Scriptable* /*Owner*/, Actor* target, Effect* fx)
 		}
 	}
 
-	if (! (STAT_GET(IE_STATE_ID)&STATE_NOSAVE)) {
+	if (!STATE_GET(STATE_NOSAVE)) {
 		game->familiarBlock=true;
 		return FX_APPLIED;
 	}
@@ -5523,7 +5521,7 @@ int fx_bounce_spelllevel (Scriptable* /*Owner*/, Actor* target, Effect* fx)
 int fx_bounce_spelllevel_dec (Scriptable* /*Owner*/, Actor* target, Effect* fx)
 {
 	if(0) print("fx_bounce_spellevel_dec(%2d): Type: %d", fx->Opcode, fx->Parameter2);
-	if (fx->Parameter1<1) {
+	if (fx->Parameter1 < 1 || STATE_GET(STATE_DEAD)) {
 		PlayRemoveEffect("EFF_E02", target, fx);
 		return FX_NOT_APPLIED;
 	}
@@ -6164,7 +6162,7 @@ int fx_cast_spell_on_condition (Scriptable* Owner, Actor* target, Effect* fx)
 	bool condition = false;
 	bool per_round = true; // 4xxx trigger?
 	const TriggerEntry *entry = NULL;
-	ieDword timeOfDay;
+	Trigger* parameters;
 	Actor *nearest = NULL;
 
 	// check the condition
@@ -6229,10 +6227,10 @@ int fx_cast_spell_on_condition (Scriptable* Owner, Actor* target, Effect* fx)
 	case COND_TIMEOFDAY:
 		// BGEE: Night Club
 		if (actor != target) break;
-		// FIXME: needs to take offsets into account to match time.ids / timeoday.ids
-		// just use GameScript::TimeOfDay parameters->int0Parameter == TIMEOFDAY_NIGHT
-		timeOfDay = core->Time.GetHour(core->GetGame()->GameTime)/4;
-		condition = timeOfDay == fx->IsVariable;
+		parameters = new Trigger;
+		parameters->int0Parameter = fx->IsVariable;
+		condition = GameScript::TimeOfDay(nullptr, parameters);
+		delete parameters;
 		break;
 	case COND_NEARX:
 		// Range([ANYONE], 'Extra')
@@ -6540,6 +6538,7 @@ int fx_puppet_marker (Scriptable* /*Owner*/, Actor* target, Effect* fx)
 int fx_disintegrate (Scriptable* /*Owner*/, Actor* target, Effect* fx)
 {
 	if(0) print("fx_disintegrate(%2d): Mod: %d, Type: %d", fx->Opcode, fx->Parameter1, fx->Parameter2);
+	if (target->GetStat(IE_DISABLECHUNKING)) return FX_NOT_APPLIED;
 	if (EffectQueue::match_ids( target, fx->Parameter2, fx->Parameter1) ) {
 		//convert it to a death opcode or apply the new effect?
 		fx->Opcode = EffectQueue::ResolveEffect(fx_death_ref);
@@ -6712,17 +6711,14 @@ int fx_change_bardsong (Scriptable* /*Owner*/, Actor* target, Effect* fx)
 int fx_set_area_effect (Scriptable* Owner, Actor* target, Effect* fx)
 {
 	if(0) print("fx_set_trap(%2d): Mod: %d, Type: %d", fx->Opcode, fx->Parameter1, fx->Parameter2);
-	ieDword skill, roll;
-	Map *map;
-
-	map = target->GetCurrentArea();
+	ieDword skill, roll, level;
+	const Map *map = target->GetCurrentArea();
 	if (!map) return FX_NOT_APPLIED;
 
 	proIterator iter;
 
-	//check if trap count is over an amount (only saved traps count)
-	//actually, only projectiles in trigger phase should count here
-	if (map->GetTrapCount(iter)>6) {
+	// check if the new trap count is cheesy (only saved traps count)
+	if (map->GetTrapCount(iter) + 1 > gamedata->GetTrapLimit(Owner)) {
 		displaymsg->DisplayConstantStringName(STR_NOMORETRAP, DMC_WHITE, target);
 		return FX_NOT_APPLIED;
 	}
@@ -6734,11 +6730,17 @@ int fx_set_area_effect (Scriptable* Owner, Actor* target, Effect* fx)
 	}
 
 	if (Owner->Type==ST_ACTOR) {
-		skill = ((Actor *)Owner)->GetStat(IE_SETTRAPS);
+		const Actor *caster = (Actor *) Owner;
+		skill = caster->GetStat(IE_SETTRAPS);
 		roll = target->LuckyRoll(1,100,0,LR_NEGATIVE);
+		// assuming functioning thief, but allowing modded exceptions
+		// thieves aren't casters, so 0 for a later spell type lookup is not good enough
+		level = caster->GetThiefLevel();
+		level = level ? level : caster->GetXPLevel(false);
 	} else {
 		roll=0;
 		skill=0;
+		level = 0;
 	}
 
 	if (roll>skill) {
@@ -6763,7 +6765,7 @@ int fx_set_area_effect (Scriptable* Owner, Actor* target, Effect* fx)
 	// save the current spell ref, so the rest of its effects can be applied afterwards
 	ieResRef OldSpellResRef;
 	memcpy(OldSpellResRef, Owner->SpellResRef, sizeof(OldSpellResRef));
-	Owner->DirectlyCastSpellPoint(Point(fx->PosX, fx->PosY), fx->Resource, 0, 1, false);
+	Owner->DirectlyCastSpellPoint(Point(fx->PosX, fx->PosY), fx->Resource, level, 1, false);
 	Owner->SetSpellResRef(OldSpellResRef);
 	return FX_NOT_APPLIED;
 }
@@ -6886,7 +6888,7 @@ int fx_spelltrap(Scriptable* /*Owner*/, Actor* target, Effect* fx)
 		target->RestoreSpellLevel(fx->Parameter3, 0);
 		fx->Parameter3 = 0;
 	}
-	if (fx->Parameter1<=0) {
+	if (fx->Parameter1 <=0 || STATE_GET(STATE_DEAD)) {
 		//gone down to zero
 		return FX_NOT_APPLIED;
 	}
@@ -7123,7 +7125,7 @@ int fx_remove_projectile (Scriptable* /*Owner*/, Actor* target, Effect* fx)
 	if(0) print("fx_remove_projectile(%2d): Mod: %d, Type: %d", fx->Opcode, fx->Parameter1, fx->Parameter2);
 
 	if (!target) return FX_NOT_APPLIED;
-	Map *area = target->GetCurrentArea();
+	const Map *area = target->GetCurrentArea();
 	if (!area) return FX_NOT_APPLIED;
 
 	switch (fx->Parameter2) {
@@ -7398,7 +7400,9 @@ int fx_existance_delay_modifier (Scriptable* /*Owner*/, Actor* target, Effect* f
 	STAT_SET( IE_EXISTANCEDELAY, fx->Parameter1 );
 	return FX_APPLIED;
 }
-//0x127 DisableChunk
+//0x127 DisableChunk / DisablePermanentDeath
+// protects against chunking, disintegration, permanent death from the kill opcode (causes normal death instead)
+// doesn't prevent normal petrification (from the opcode) and doesn't protect from normal freezing (eg. from Cone of Cold)
 int fx_disable_chunk_modifier (Scriptable* /*Owner*/, Actor* target, Effect* fx)
 {
 	if(0) print("fx_disable_chunk_modifier(%2d): Mod: %d, Type: %d", fx->Opcode, fx->Parameter1, fx->Parameter2);

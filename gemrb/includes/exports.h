@@ -38,7 +38,7 @@
 #	endif
 #	define GEM_EXPORT_DLL extern "C" __declspec(dllexport)
 #else
-#	if (__GNUC__ >= 3) && (__GNUC_MINOR__ >=4 || __GNUC__ > 3)
+#	ifdef __GNUC__
 #		ifdef GEM_BUILD_DLL
 #			define GEM_EXPORT __attribute__ ((visibility("default")))
 #		endif
@@ -65,6 +65,8 @@
 
 /// Disable silly MSVC warnings
 #if _MSC_VER >= 1000
+//  4267 disables the warnings related to conversion between size_t and other types 
+#	pragma warning( disable: 4267 )
 //	4251 disables the annoying warning about missing dll interface in templates
 #	pragma warning( disable: 4251 521 )
 #	pragma warning( disable: 4275 )

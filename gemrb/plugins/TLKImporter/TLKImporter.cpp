@@ -282,8 +282,13 @@ int TLKImporter::BuiltinToken(char* Token, char* dest)
 		Decoded = GetCString( RaceStrRef(-1), 0);
 		goto exit_function;
 	}
+
+	// handle Player10 (max for MaxPartySize), then the rest
+	if (!strncmp(Token, "PLAYER10", 8)) {
+		Decoded = CharName(10);
+		goto exit_function;
+	}
 	if (!strncmp( Token, "PLAYER", 6 )) {
-		// FIXME: this assumes a single digit number of players.
 		Decoded = CharName(Token[strlen(Token)-1]-'1');
 		goto exit_function;
 	}
@@ -509,7 +514,7 @@ empty:
 		return string2;
 	}
 	// remove the linefeed and carriage return if requested
-	if ((flags & IE_STR_REMOVE_NEWLINE)) {
+	if (flags & IE_STR_REMOVE_NEWLINE) {
 		core->StripLine( string, Length);
 	}
 	return string;

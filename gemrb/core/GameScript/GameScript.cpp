@@ -52,8 +52,14 @@
 #include "Interface.h"
 #include "PluginMgr.h"
 #include "TableMgr.h"
-#include "RNG/RNG_SFMT.h"
+#include "RNG.h"
 #include "System/StringBuffer.h"
+
+#if defined(__sgi)
+#  include <stdarg.h>
+#else
+#  include <cstdarg>
+#endif
 
 namespace GemRB {
 
@@ -516,7 +522,7 @@ static const ActionLink actionnames[] = {
 	{"bitglobal", GameScript::BitGlobal,AF_MERGESTRINGS},
 	{"bitset", GameScript::GlobalBOr,AF_MERGESTRINGS}, //probably the same
 	{"breakinstants", GameScript::BreakInstants, AF_BLOCKING},//delay execution of instants to the next AI cycle???
-	{"calllightning", GameScript::Kill, 0}, //TODO: call lightning projectile
+	{"calllightning", GameScript::Kill, 0}, // just an instant death with Param2 = 0x100
 	{"calm", GameScript::Calm, 0},
 	{"changeaiscript", GameScript::ChangeAIScript, 0},
 	{"changeaitype", GameScript::ChangeAIType, 0},
@@ -921,6 +927,7 @@ static const ActionLink actionnames[] = {
 	{"setnamelessdisguise", GameScript::SetNamelessDisguise, 0},
 	{"setnooneontrigger", GameScript::SetNoOneOnTrigger, 0},
 	{"setnumtimestalkedto", GameScript::SetNumTimesTalkedTo, 0},
+	{"setoriginalclass", GameScript::SetOriginalClass, 0},
 	{"setplayersound", GameScript::SetPlayerSound, 0},
 	{"setquestdone", GameScript::SetQuestDone, 0},
 	{"setregularnamestrref", GameScript::SetRegularName, 0},
@@ -962,7 +969,7 @@ static const ActionLink actionnames[] = {
 	{"spellpointnodec", GameScript::SpellPointNoDec, AF_BLOCKING|AF_ALIVE},
 	{"startcombatcounter", GameScript::StartCombatCounter, 0},
 	{"startcutscene", GameScript::StartCutScene, 0},
-	{"startcutsceneex", GameScript::StartCutScene, 0}, //pst (unknown)
+	{"startcutsceneex", GameScript::StartCutSceneEx, 0}, //pst (unknown), EE perhaps as of PST:EE
 	{"startcutscenemode", GameScript::StartCutSceneMode, 0},
 	{"startdialog", GameScript::StartDialogue,AF_BLOCKING},
 	{"startdialoginterrupt", GameScript::StartDialogueInterrupt,AF_BLOCKING},
@@ -1171,6 +1178,8 @@ static const IDSLink idsnames[] = {
 	{ NULL,NULL}
 };
 
+static int NextTriggerObjectID = 0;
+
 static const TriggerLink* FindTrigger(const char* triggername)
 {
 	if (!triggername) {
@@ -1241,7 +1250,15 @@ void SetScriptDebugMode(int arg)
 	InDebug=arg;
 }
 
+void ScriptDebugLog(int bit, const char *message, ...)
+{
+	if (!(InDebug & bit)) return;
 
+	va_list ap;
+	va_start(ap, message);
+	LogVA(DEBUG, "GameScript", message, ap);
+	va_end(ap);
+}
 
 /********************** Targets **********************************/
 
@@ -1361,6 +1378,21 @@ void Targets::dump() const
 	}
 }
 
+void Targets::FilterObjectRect(const Object *oC)
+{
+	// can't match anything if the second pair of coordinates (or all of them) are unset
+	if (oC->objectRect.w <= 0 || oC->objectRect.h <= 0) return;
+
+	targetlist::const_iterator m;
+	for (m = objects.begin(); m != objects.end();) {
+		if (!IsInObjectRect((*m).actor->Pos, oC->objectRect)) {
+			m = objects.erase(m);
+		} else {
+			++m;
+		}
+	}
+}
+
 /** releasing global memory */
 static void CleanupIEScript()
 {
@@ -1389,8 +1421,6 @@ static void printFunction(StringBuffer& buffer, Holder<SymbolMgr> table, int ind
 
 static void LoadActionFlags(const char *tableName, int flag, bool critical)
 {
-	int i, j;
-
 	int tableIndex = core->LoadSymbol(tableName);
 	if (tableIndex < 0) {
 		if (critical) {
@@ -1403,9 +1433,9 @@ static void LoadActionFlags(const char *tableName, int flag, bool critical)
 	if (!table) {
 		error("GameScript", "Couldn't load %s symbols!\n",tableName);
 	}
-	j = table->GetSize();
+	int j = table->GetSize();
 	while (j--) {
-		i = table->GetValueIndex( j );
+		int i = table->GetValueIndex(j);
 		if (i >= MAX_ACTIONS) {
 			Log(ERROR, "GameScript", "%s action %d (%s) is too high, ignoring",
 				tableName, i, table->GetStringIndex( j ) );
@@ -1451,8 +1481,6 @@ void InitializeIEScript()
 		error("GameScript", "A critical scripting file is damaged!\n");
 	}
 
-	int i;
-
 	/* Loading Script Configuration Parameters */
 
 	ObjectIDSCount = atoi( objNameTable->QueryField() );
@@ -1461,7 +1489,7 @@ void InitializeIEScript()
 	}
 
 	ObjectIDSTableNames = (ieResRef *) malloc( sizeof(ieResRef) * ObjectIDSCount );
-	for (i = 0; i < ObjectIDSCount; i++) {
+	for (int i = 0; i < ObjectIDSCount; i++) {
 		const char *idsname;
 		idsname=objNameTable->QueryField( 0, i + 1 );
 		const IDSLink *poi=FindIdentifier( idsname );
@@ -1490,11 +1518,11 @@ void InitializeIEScript()
 	memset( actionflags, 0, sizeof( actionflags ) );
 	memset( objects, 0, sizeof( objects ) );
 
-	int j, max;
+	int max;
 
 	max = triggersTable->GetSize();
-	for (j=0;j<max;j++) {
-		i = triggersTable->GetValueIndex( j );
+	for (int j = 0; j < max; j++) {
+		int i = triggersTable->GetValueIndex(j);
 		const TriggerLink* poi = FindTrigger(triggersTable->GetStringIndex( j ));
 
 		bool was_condition = (i & 0x4000);
@@ -1538,7 +1566,7 @@ void InitializeIEScript()
 	}
 
 	for (l = missing_triggers.begin(); l != missing_triggers.end(); ++l) {
-		j = *l;
+		int j = *l;
 		// found later as a different name
 		int ii = triggersTable->GetValueIndex( j ) & 0x3fff;
 		if (ii >= MAX_TRIGGERS) {
@@ -1547,13 +1575,10 @@ void InitializeIEScript()
 		
 		TriggerFunction f = triggers[ii];
 		if (f) {
-			for (i = 0; triggernames[i].Name; i++) {
+			for (int i = 0; triggernames[i].Name; i++) {
 				if (f == triggernames[i].Function) {
-					if (InDebug&ID_TRIGGERS) {
-						Log(MESSAGE, "GameScript", "%s is a synonym of %s",
-							triggersTable->GetStringIndex( j ), triggernames[i].Name );
-						break;
-					}
+					ScriptDebugLog(ID_TRIGGERS, "%s is a synonym of %s", triggersTable->GetStringIndex(j), triggernames[i].Name);
+					break;
 				}
 			}
 			continue;
@@ -1566,8 +1591,8 @@ void InitializeIEScript()
 	}
 
 	max = actionsTable->GetSize();
-	for (j=0;j<max;j++) {
-		i = actionsTable->GetValueIndex( j );
+	for (int j = 0; j < max; j++) {
+		int i = actionsTable->GetValueIndex(j);
 		if (i >= MAX_ACTIONS) {
 			Log(ERROR, "GameScript", "action %d (%s) is too high, ignoring",
 				i, actionsTable->GetStringIndex( j ) );
@@ -1610,8 +1635,8 @@ void InitializeIEScript()
 		 * right now you can't print or generate these actions!
 		 */
 		max = overrideActionsTable->GetSize();
-		for (j=0;j<max;j++) {
-			i = overrideActionsTable->GetValueIndex( j );
+		for (int j = 0; j < max; j++) {
+			int i = overrideActionsTable->GetValueIndex(j);
 			if (i >= MAX_ACTIONS) {
 				Log(ERROR, "GameScript", "action %d (%s) is too high, ignoring",
 					i, overrideActionsTable->GetStringIndex( j ) );
@@ -1649,16 +1674,19 @@ void InitializeIEScript()
 		 * right now you can't print or generate these actions!
 		 */
 		max = overrideTriggersTable->GetSize();
-		for (j=0;j<max;j++) {
-			i = overrideTriggersTable->GetValueIndex( j );
+		for (int j = 0; j < max; j++) {
+			int i = overrideTriggersTable->GetValueIndex( j );
 			bool was_condition = (i & 0x4000);
 			i &= 0x3fff;
+			const char *trName = overrideTriggersTable->GetStringIndex(j);
 			if (i >= MAX_TRIGGERS) {
-				Log(ERROR, "GameScript", "trigger %d (%s) is too high, ignoring",
-					i, overrideTriggersTable->GetStringIndex( j ) );
+				Log(ERROR, "GameScript", "Trigger %d (%s) is too high, ignoring", i, trName);
 				continue;
 			}
-			const TriggerLink *poi = FindTrigger( overrideTriggersTable->GetStringIndex( j ));
+			if (!NextTriggerObjectID && !stricmp(trName, "NextTriggerObject(O:Object*)")) {
+				NextTriggerObjectID = i;
+			}
+			const TriggerLink *poi = FindTrigger(trName);
 			if (!poi) {
 				StringBuffer buffer;
 
@@ -1670,8 +1698,7 @@ void InitializeIEScript()
 			if (triggers[i] && ( (triggers[i]!=poi->Function) || (triggerflags[i]!=tf) ) ) {
 				StringBuffer buffer;
 
-				buffer.appendFormatted("%s overrides existing trigger ",
-					overrideTriggersTable->GetStringIndex( j ) );
+				buffer.appendFormatted("%s overrides existing trigger ", trName);
 				int x = triggersTable->FindValue(i);
 				if (x<0) x = triggersTable->FindValue(i|0x4000);
 				if (x>=0) {
@@ -1689,7 +1716,7 @@ void InitializeIEScript()
 	}
 
 	for (l = missing_actions.begin(); l != missing_actions.end(); ++l) {
-		j = *l;
+		int j = *l;
 		// found later as a different name
 		int ii = actionsTable->GetValueIndex( j );
 		if (ii>=MAX_ACTIONS) {
@@ -1698,13 +1725,10 @@ void InitializeIEScript()
 
 		ActionFunction f = actions[ii];
 		if (f) {
-			for (i = 0; actionnames[i].Name; i++) {
+			for (int i = 0; actionnames[i].Name; i++) {
 				if (f == actionnames[i].Function) {
-					if (InDebug&ID_ACTIONS) {
-						Log(MESSAGE, "GameScript", "%s is a synonym of %s",
-							actionsTable->GetStringIndex( j ), actionnames[i].Name );
-						break;
-					}
+					ScriptDebugLog(ID_ACTIONS, "%s is a synonym of %s", actionsTable->GetStringIndex(j), actionnames[i].Name);
+					break;
 				}
 			}
 			continue;
@@ -1715,9 +1739,9 @@ void InitializeIEScript()
 		Log(WARNING, "GameScript", buffer);
 	}
 
-	j = objectsTable->GetSize();
+	int j = objectsTable->GetSize();
 	while (j--) {
-		i = objectsTable->GetValueIndex( j );
+		int i = objectsTable->GetValueIndex(j);
 		if (i >= MAX_OBJECTS) {
 			Log(ERROR, "GameScript", "object %d (%s) is too high, ignoring",
 				i, objectsTable->GetStringIndex( j ) );
@@ -1758,7 +1782,7 @@ void InitializeIEScript()
 
 		ObjectFunction f = objects[ii];
 		if (f) {
-			for (i = 0; objectnames[i].Name; i++) {
+			for (int i = 0; objectnames[i].Name; i++) {
 				if (f == objectnames[i].Function) {
 					Log(MESSAGE, "GameScript", "%s is a synonym of %s",
 						objectsTable->GetStringIndex( j ), objectnames[i].Name );
@@ -1793,7 +1817,7 @@ void InitializeIEScript()
 		}
 		j = savedTriggersTable->GetSize();
 		while (j--) {
-			i = savedTriggersTable->GetValueIndex( j );
+			int i = savedTriggersTable->GetValueIndex(j);
 			i &= 0x3fff;
 			if (i >= MAX_TRIGGERS) {
 				Log(ERROR, "GameScript", "saved trigger %d (%s) is too high, ignoring",
@@ -1828,9 +1852,7 @@ GameScript::~GameScript(void)
 	if (script) {
 		//set 3. parameter to true if you want instant free
 		//and possible death
-		if (InDebug&ID_REFERENCE) {
-			Log(DEBUG, "GameScript", "One instance of %s is dropped from %d.", Name, BcsCache.RefCount(Name) );
-		}
+		ScriptDebugLog(ID_REFERENCE, "One instance of %s is dropped from %d.", Name, BcsCache.RefCount(Name));
 		int res = BcsCache.DecRef(script, Name, true);
 
 		if (res<0) {
@@ -1852,9 +1874,7 @@ Script* GameScript::CacheScript(ieResRef ResRef, bool AIScript)
 
 	Script *newScript = (Script *) BcsCache.GetResource(ResRef);
 	if ( newScript ) {
-		if (InDebug&ID_REFERENCE) {
-			Log(DEBUG, "GameScript", "Caching %s for the %d. time\n", ResRef, BcsCache.RefCount(ResRef) );
-		}
+		ScriptDebugLog(ID_REFERENCE, "Caching %s for the %d-th time\n", ResRef, BcsCache.RefCount(ResRef));
 		return newScript;
 	}
 
@@ -1870,9 +1890,7 @@ Script* GameScript::CacheScript(ieResRef ResRef, bool AIScript)
 	}
 	newScript = new Script( );
 	BcsCache.SetAt( ResRef, (void *) newScript );
-	if (InDebug&ID_REFERENCE) {
-		Log(DEBUG, "GameScript", "Caching %s for the %d. time", ResRef, BcsCache.RefCount(ResRef) );
-	}
+	ScriptDebugLog(ID_REFERENCE, "Caching %s for the %d-th time", ResRef, BcsCache.RefCount(ResRef));
 
 	while (true) {
 		ResponseBlock* rB = ReadResponseBlock( stream );
@@ -1890,10 +1908,16 @@ static int ParseInt(const char*& src)
 	char number[33];
 
 	char* tmp = number;
+	int i = 1;
 	while (isdigit(*src) || *src=='-') {
+		if (i == 33) {
+			Log(ERROR, "GameScript", "Truncating too big integer!");
+			break;
+		}
 		*tmp = *src;
 		tmp++;
 		src++;
+		i++;
 	}
 	*tmp = 0;
 	if (*src)
@@ -1915,22 +1939,23 @@ static void ParseString(const char*& src, char* tmp)
 
 static Object* DecodeObject(const char* line)
 {
-	int i;
 	const char *origline = line; // for debug below
 
 	Object* oB = new Object();
-	for (i = 0; i < ObjectFieldsCount; i++) {
+	for (int i = 0; i < ObjectFieldsCount; i++) {
 		oB->objectFields[i] = ParseInt( line );
 	}
-	for (i = 0; i < MaxObjectNesting; i++) {
+	for (int i = 0; i < MaxObjectNesting; i++) {
 		oB->objectFilters[i] = ParseInt( line );
 	}
 	//iwd tolerates the missing rectangle, so we do so too
 	if (HasAdditionalRect && (*line=='[') ) {
 		line++; //Skip [
-		for (i = 0; i < 4; i++) {
-			oB->objectRect[i] = ParseInt( line );
+		int tmp[4];
+		for (int i = 0; i < 4; i++) {
+			tmp[i] = ParseInt(line);
 		}
+		oB->objectRect = Region(tmp[0], tmp[1], tmp[2] - tmp[0], tmp[3] - tmp[1]);
 		if (*line == ' ')
 			line++; //Skip ] (not really... it skips a ' ' since the ] was skipped by the ParseInt function
 	}
@@ -1948,7 +1973,7 @@ static Object* DecodeObject(const char* line)
 	if (ExtraParametersCount && *line) {
 		line++;
 	}
-	for (i = 0; i < ExtraParametersCount; i++) {
+	for (int i = 0; i < ExtraParametersCount; i++) {
 		oB->objectFields[i + ObjectFieldsCount] = ParseInt( line );
 	}
 	if (*line != 'O' || *(line + 1) != 'B') {
@@ -1999,9 +2024,6 @@ static Trigger* ReadTrigger(DataStream* stream)
 	return tR;
 }
 
-// NOTE: keep these in sync with gemtrig.ids!
-#define NEXT_TRIGGER_OBJECT_EX 0x4100
-#define NEXT_TRIGGER_OBJECT_EE 0x40e0
 static Condition* ReadCondition(DataStream* stream)
 {
 	char line[10];
@@ -2029,7 +2051,7 @@ static Condition* ReadCondition(DataStream* stream)
 			delete tR->objectParameter; // not using Release, so we don't have to check if it's null
 			tR->objectParameter = triggerer;
 			triggerer = NULL;
-		} else if (tR->triggerID == (0x3fff&NEXT_TRIGGER_OBJECT_EX) || tR->triggerID == (0x3fff&NEXT_TRIGGER_OBJECT_EE)) {
+		} else if (tR->triggerID == NextTriggerObjectID) {
 			triggerer = tR->objectParameter;
 			tR->objectParameter = NULL;
 			delete tR;
@@ -2045,6 +2067,9 @@ static Condition* ReadCondition(DataStream* stream)
  * if you pass non-NULL parameters, continuing is set to whether we Continue()ed
  * (should start false and be passed to next script's Update),
  * and done is set to whether we processed a block without Continue()
+ *
+ * NOTE: After calling, callers should deallocate this object if `dead==true`.
+ *  Scripts can replace themselves while running but it's up to the caller to clean up.
  */
 bool GameScript::Update(bool *continuing, bool *done)
 {
@@ -2061,7 +2086,7 @@ bool GameScript::Update(bool *continuing, bool *done)
 	bool continueExecution = false;
 	if (continuing) continueExecution = *continuing;
 
-	RandomNumValue=RNG_SFMT::getInstance()->rand();
+	RandomNumValue = RAND_ALL();
 	for (size_t a = 0; a < script->responseBlocks.size(); a++) {
 		ResponseBlock* rB = script->responseBlocks[a];
 		if (rB->condition->Evaluate(MySelf)) {
@@ -2098,7 +2123,9 @@ bool GameScript::Update(bool *continuing, bool *done)
 				}
 				lastAction=a;
 			}
+			running = true;
 			continueExecution = ( rB->responseSet->Execute(MySelf) != 0);
+			running = false;
 			if (continuing) *continuing = continueExecution;
 			if (!continueExecution) {
 				if (done) *done = true;
@@ -2112,7 +2139,10 @@ bool GameScript::Update(bool *continuing, bool *done)
 //IE simply takes the first action's object for cutscene object
 //then adds these actions to its queue:
 // SetInterrupt(false), <actions>, SetInterrupt(true)
-
+/*
+ * NOTE: After calling, callers should deallocate this object if `dead==true`.
+ *  Scripts can replace themselves while running but it's up to the caller to clean up.
+ */
 void GameScript::EvaluateAllBlocks()
 {
 	if (!MySelf || !(MySelf->GetInternalFlag()&IF_ACTIVE) ) {
@@ -2287,6 +2317,11 @@ bool Condition::Evaluate(Scriptable* Sender)
 	unsigned int result = 0;
 	bool subresult = true;
 
+	if (triggers.empty()) {
+		Log(ERROR, "GameScript", "Trigger block without triggers encountered!");
+		return false;
+	}
+
 	for (size_t i = 0; i < triggers.size(); i++) {
 		Trigger* tR = triggers[i];
 		//do not evaluate triggers in an Or() block if one of them
@@ -2342,10 +2377,8 @@ int Trigger::Evaluate(Scriptable* Sender)
 			triggerID, tmpstr );
 		return 0;
 	}
-	if (InDebug&ID_TRIGGERS) {
-		Log(WARNING, "GameScript", "Executing trigger code: 0x%04x %s",
-				triggerID, tmpstr );
-	}
+	ScriptDebugLog(ID_TRIGGERS, "Executing trigger code: 0x%04x %s", triggerID, tmpstr);
+
 	int ret = func( Sender, this );
 	if (flags & TF_NEGATE) {
 		return !ret;
@@ -2355,8 +2388,6 @@ int Trigger::Evaluate(Scriptable* Sender)
 
 int ResponseSet::Execute(Scriptable* Sender)
 {
-	size_t i;
-
 	switch(responses.size()) {
 		case 0:
 			return 0;
@@ -2367,8 +2398,8 @@ int ResponseSet::Execute(Scriptable* Sender)
 	int randWeight;
 	int maxWeight = 0;
 
-	for (i = 0; i < responses.size(); i++) {
-		maxWeight += responses[i]->weight;
+	for (const Response *response : responses) {
+		maxWeight += response->weight;
 	}
 	if (maxWeight) {
 		randWeight = RAND(0, maxWeight-1);
@@ -2377,12 +2408,11 @@ int ResponseSet::Execute(Scriptable* Sender)
 		randWeight = 0;
 	}
 
-	for (i = 0; i < responses.size(); i++) {
-		Response* rE = responses[i];
-		if (rE->weight > randWeight) {
-			return rE->Execute(Sender);
+	for (Response *response : responses) {
+		if (response->weight > randWeight) {
+			return response->Execute(Sender);
 		}
-		randWeight-=rE->weight;
+		randWeight -= response->weight;
 	}
 	return 0;
 }
@@ -2392,14 +2422,6 @@ int Response::Execute(Scriptable* Sender)
 {
 	int ret = 0; // continue or not
 	for (size_t i = 0; i < actions.size(); i++) {
-		if (!CheckCanary()) {
-			// FIXME: hack to prevent crashing when a script deletes itself.
-			// this object has been deleted and this should not be considered a fix (it may cause unforseen problems too).
-			Log(ERROR, "GameScript", "Aborting response execution due to object deletion.\n \
-									  This should not happen and we need to fix it.");
-			ret = 0;
-			break;
-		}
 		Action* aC = actions[i];
 		switch (actionflags[aC->actionID] & AF_MASK) {
 			case AF_IMMEDIATE:
@@ -2436,16 +2458,13 @@ void GameScript::ExecuteAction(Scriptable* Sender, Action* aC)
 	// check for ActionOverride
 	// actions use the second and third object, so this is only set when overriden (see GenerateActionCore)
 	if (aC->objects[0]) {
-		Scriptable *scr = GetActorFromObject(Sender, aC->objects[0]);
+		Scriptable *scr = GetActorFromObject(Sender, aC->objects[0], GA_NO_DEAD);
 
 		aC->IncRef(); // if aC is us, we don't want it deleted!
 		Sender->ReleaseCurrentAction();
 
 		if (scr) {
-			if (InDebug&ID_ACTIONS) {
-				Log(WARNING, "GameScript", "Sender %s ran ActionOverride on %s",
-					Sender->GetScriptName(), scr->GetScriptName() );
-			}
+			ScriptDebugLog(ID_ACTIONS, "Sender %s ran ActionOverride on %s", Sender->GetScriptName(), scr->GetScriptName());
 			scr->ReleaseCurrentAction();
 			scr->AddAction(ParamCopyNoOverride(aC));
 			if (!(actionflags[actionID] & AF_INSTANT)) {
@@ -2521,9 +2540,8 @@ void GameScript::ExecuteAction(Scriptable* Sender, Action* aC)
 Trigger* GenerateTrigger(char* String)
 {
 	strlwr( String );
-	if (InDebug&ID_TRIGGERS) {
-		Log(WARNING, "GameScript", "Compiling:%s", String);
-	}
+	ScriptDebugLog(ID_TRIGGERS, "Compiling: %s", String);
+
 	int negate = 0;
 	if (*String == '!') {
 		String++;
@@ -2551,9 +2569,8 @@ Action* GenerateAction(const char* String)
 	char* actionString = strdup(String);
 	// the only thing we seem to need a copy for is the call to strlwr...
 	strlwr( actionString );
-	if (InDebug&ID_ACTIONS) {
-		Log(WARNING, "GameScript", "Compiling:%s", String);
-	}
+	ScriptDebugLog(ID_ACTIONS, "Compiling: %s", String);
+
 	int len = strlench(String,'(')+1; //including (
 	char *src = actionString+len;
 	int i = -1;
@@ -2585,7 +2602,7 @@ Action* GenerateAction(const char* String)
 	return action;
 }
 
-Action* GenerateActionDirect(const char *String, Scriptable *object)
+Action *GenerateActionDirect(const char *String, const Scriptable *object)
 {
 	Action* action = GenerateAction(String);
 	if (!action) return NULL;
@@ -2606,21 +2623,19 @@ void Object::dump() const
 
 void Object::dump(StringBuffer& buffer) const
 {
-	int i;
-
 	AssertCanary(__FUNCTION__);
 	if(objectName[0]) {
 		buffer.appendFormatted("Object: %s\n",objectName);
 		return;
 	}
 	buffer.appendFormatted("IDS Targeting: ");
-	for(i=0;i<MAX_OBJECT_FIELDS;i++) {
-		buffer.appendFormatted("%d ",objectFields[i]);
+	for (auto objectField : objectFields) {
+		buffer.appendFormatted("%d ", objectField);
 	}
 	buffer.append("\n");
 	buffer.append("Filters: ");
-	for(i=0;i<MAX_NESTING;i++) {
-		buffer.appendFormatted("%d ",objectFilters[i]);
+	for (auto objectFilter : objectFilters) {
+		buffer.appendFormatted("%d ", objectFilter);
 	}
 	buffer.append("\n");
 }
@@ -2674,13 +2689,11 @@ void Action::dump() const
 
 void Action::dump(StringBuffer& buffer) const
 {
-	int i;
-
 	AssertCanary(__FUNCTION__);
 	buffer.appendFormatted("Int0: %d, Int1: %d, Int2: %d\n",int0Parameter, int1Parameter, int2Parameter);
 	buffer.appendFormatted("String0: %s, String1: %s\n", string0Parameter[0]?string0Parameter:"<NULL>", string1Parameter[0]?string1Parameter:"<NULL>");
 	buffer.appendFormatted("Point: [%d.%d]\n", pointParameter.x, pointParameter.y);
-	for (i=0;i<3;i++) {
+	for (int i = 0; i < 3; i++) {
 		if (objects[i]) {
 			buffer.appendFormatted( "%d. ",i+1);
 			objects[i]->dump(buffer);

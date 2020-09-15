@@ -82,7 +82,7 @@
 #include "GUI/TextArea.h"
 #include "GUI/Window.h"
 #include "GUI/WorldMapControl.h"
-#include "RNG/RNG_SFMT.h"
+#include "RNG.h"
 #include "Scriptable/Container.h"
 #include "System/FileStream.h"
 #include "System/VFS.h"
@@ -93,6 +93,12 @@
 #endif
 
 #include <vector>
+
+#ifdef WIN32
+#include "CodepageToIconv.h"
+#else
+#include <langinfo.h>
+#endif
 
 namespace GemRB {
 
@@ -121,7 +127,7 @@ static int MagicBit = 0;
 
 Interface::Interface()
 {
-	Log(MESSAGE, "Core", "GemRB Core Version v%s Loading...", VERSION_GEMRB );
+	Log(MESSAGE, "Core", "GemRB core version v" VERSION_GEMRB " loading ...");
 
 	// default to the correct endianswitch
 	ieWord endiantest = 1;
@@ -250,6 +256,23 @@ Interface::Interface()
 	SpecialSpellsCount = -1;
 	SpecialSpells = NULL;
 	Encoding = "default";
+
+#ifdef WIN32
+#ifdef HAVE_ICONV
+	const uint32_t codepage = GetACP();
+	const char* iconvCode = GetIconvNameForCodepage(codepage);
+
+	if (nullptr == iconvCode) {
+		error("Interface", "Mapping of codepage %u unknown to iconv.", codepage);
+	}
+	SystemEncoding = iconvCode;
+#else // HAVE_ICONV
+	SystemEncoding = nullptr;
+#endif// HAVE_ICONV
+#else // WIN32
+	SystemEncoding = nl_langinfo(CODESET);
+#endif // WIN32
+
 	TLKEncoding.encoding = "ISO-8859-1";
 	TLKEncoding.widechar = false;
 	TLKEncoding.multibyte = false;
@@ -1478,17 +1501,9 @@ int Interface::Init(InterfaceConfig* config)
 	}
 	ieDword brightness = 10;
 	ieDword contrast = 5;
-
-	// SDL2 driver requires the display to be created prior to sprite creation (opengl context)
-	// we also need the display to exist to create sprites using the display format
-	vars->Lookup("Full Screen", FullScreen);
-	if (video->CreateDisplay( Width, Height, Bpp, FullScreen, GameName) == GEM_ERROR) {
-		Log(FATAL, "Core", "Cannot initialize shaders.");
-		return GEM_ERROR;
-	}
 	vars->Lookup("Brightness Correction", brightness);
 	vars->Lookup("Gamma Correction", contrast);
-	video->SetGamma(brightness, contrast);
+	vars->Lookup("Full Screen", FullScreen);
 
 	Color defcolor={255,255,255,200};
 	SetInfoTextColor(defcolor);
@@ -1596,6 +1611,20 @@ int Interface::Init(InterfaceConfig* config)
 	char unhardcodedTypePath[_MAX_PATH * 2];
 	PathJoin(unhardcodedTypePath, GemRBUnhardcodedPath, "unhardcoded", GameType, NULL);
 	gamedata->AddSource(unhardcodedTypePath, "GemRB Unhardcoded data", PLUGIN_RESOURCE_CACHEDDIRECTORY, RM_REPLACE_SAME_SOURCE);
+
+	// fix the sample config default resolution for iwd2
+	if (stricmp(GameType, "iwd2") == 0 && Width == 640 && Height == 480) {
+		Width = 800;
+		Height = 600;
+	}
+
+	// SDL2 driver requires the display to be created prior to sprite creation (opengl context)
+	// we also need the display to exist to create sprites using the display format
+	if (video->CreateDisplay( Width, Height, Bpp, FullScreen, GameName) == GEM_ERROR) {
+		Log(FATAL, "Core", "Cannot initialize shaders.");
+		return GEM_ERROR;
+	}
+	video->SetGamma(brightness, contrast);
 
 	// if unset, manually populate GameName (window title)
 	std::map<std::string, std::string> gameTypeNameMap;
@@ -1838,7 +1867,6 @@ int Interface::Init(InterfaceConfig* config)
 		INIbeasts = PluginHolder<DataFileMgr>(IE_INI_CLASS_ID);
 		char tINIbeasts[_MAX_PATH];
 		PathJoin( tINIbeasts, GamePath, "beast.ini", NULL );
-		// FIXME: crashes if file does not open
 		FileStream* fs = FileStream::OpenFile( tINIbeasts );
 		if (!INIbeasts->Open(fs)) {
 			Log(WARNING, "Core", "Failed to load beast definitions.");
@@ -1848,7 +1876,6 @@ int Interface::Init(InterfaceConfig* config)
 		INIquests = PluginHolder<DataFileMgr>(IE_INI_CLASS_ID);
 		char tINIquests[_MAX_PATH];
 		PathJoin( tINIquests, GamePath, "quests.ini", NULL );
-		// FIXME: crashes if file does not open
 		FileStream* fs2 = FileStream::OpenFile( tINIquests );
 		if (!INIquests->Open(fs2)) {
 			Log(WARNING, "Core", "Failed to load quest definitions.");
@@ -1972,6 +1999,7 @@ int Interface::Init(InterfaceConfig* config)
 		pathFile->Write(pathString, strlen(pathString));
 		pathFile->Close();
 	}
+	delete pathFile;
 	return GEM_OK;
 }
 
@@ -2321,6 +2349,10 @@ bool Interface::LoadGemRBINI()
 	Actor::SetFistStat(ini->GetKeyAsInt( "resources", "FistStat", IE_CLASS));
 
 	TooltipMargin = ini->GetKeyAsInt( "resources", "TooltipMargin", TooltipMargin );
+	// These are values for how long a single step is, see Movable::DoStep.
+	// They were found via trial-and-error, trying to match
+	// the speeds from the original games.
+	gamedata->SetStepTime(ini->GetKeyAsInt("resources", "StepTime", 566)); // Defaults to BG2's value
 
 	// The format of GroundCircle can be:
 	// GroundCircleBAM1 = wmpickl/3
@@ -2381,7 +2413,7 @@ bool Interface::LoadEncoding()
 
 	// TODO: lists are incomplete
 	// maybe want to externalize this
-	// list compiled form wiki: http://www.gemrb.org/wiki/doku.php?id=engine:encodings
+	// list compiled form wiki: https://gemrb.org/Text-encodings.html
 	const char* wideEncodings[] = {
 		// Chinese
 		"GBK", "BIG5",
@@ -2504,9 +2536,6 @@ Actor *Interface::SummonCreature(const ieResRef resource, const ieResRef vvcres,
 	int cnt=10;
 	Actor * ab = NULL;
 
-	//TODO:
-	//decrease the number of summoned creatures with the number of already summoned creatures here
-	//the summoned creatures have a special IE_SEX
 	Map *map;
 	if (target) {
 		map = target->GetCurrentArea();
@@ -2521,17 +2550,6 @@ Actor *Interface::SummonCreature(const ieResRef resource, const ieResRef vvcres,
 		Actor *tmp = gamedata->GetCreature(resource);
 		if (!tmp) {
 			return NULL;
-		}
-		ieDword sex = tmp->GetStat(IE_SEX);
-		//TODO: make this external as summlimt.2da
-		int limit = 0;
-		switch (sex) {
-		case SEX_SUMMON: case SEX_SUMMON_DEMON:
-			limit = 5;
-			break;
-		case SEX_BOTH:
-			limit = 1;
-			break;
 		}
 
 		//if summoner is an actor, filter out opponent summons
@@ -2550,6 +2568,15 @@ Actor *Interface::SummonCreature(const ieResRef resource, const ieResRef vvcres,
 			}
 		}
 
+		// mark the summon, but only if they don't have a special sex already
+		if (sexmod && tmp->BaseStats[IE_SEX] < SEX_EXTRA && tmp->BaseStats[IE_SEX] != SEX_ILLUSION) {
+			tmp->SetBase(IE_SEX, SEX_SUMMON);
+		}
+
+		// only allow up to the summoning limit of new summoned creatures
+		// the summoned creatures have a special IE_SEX
+		ieDword sex = tmp->GetStat(IE_SEX);
+		int limit = gamedata->GetSummoningLimit(sex);
 		if (limit && sexmod && map->CountSummons(flag, sex)>=limit) {
 			//summoning limit reached
 			displaymsg->DisplayConstantString(STR_SUMMONINGLIMIT, DMC_WHITE);
@@ -2600,11 +2627,6 @@ Actor *Interface::SummonCreature(const ieResRef resource, const ieResRef vvcres,
 			break;
 		}
 
-		// mark the summon, but only if they don't have a special sex already
-		if (sexmod && ab->BaseStats[IE_SEX] < SEX_EXTRA && ab->BaseStats[IE_SEX] != SEX_ILLUSION) {
-			ab->SetBase(IE_SEX, SEX_SUMMON);
-		}
-
 		map->AddActor(ab, true);
 		ab->SetPosition(position, true, 0);
 		ab->RefreshEffects(NULL);
@@ -2614,8 +2636,8 @@ Actor *Interface::SummonCreature(const ieResRef resource, const ieResRef vvcres,
 			if (vvc) {
 				//This is the final position of the summoned creature
 				//not the original target point
-				vvc->XPos=ab->Pos.x;
-				vvc->YPos=ab->Pos.y;
+				vvc->XPos += ab->Pos.x;
+				vvc->YPos += ab->Pos.y;
 				//force vvc to play only once
 				vvc->PlayOnce();
 				map->AddVVCell( new VEFObject(vvc) );
@@ -3496,7 +3518,7 @@ int Interface::PlayMovie(const char* ResRef)
 			}
 		}
 	}
-	
+
 	//check whether there is an override for this movie
 	const char *sound_resref = NULL;
 	AutoTable mvesnd;
@@ -3990,7 +4012,7 @@ void Interface::UpdateWorldMap(ieResRef wmResRef)
 			nae->SetAreaStatus(ae->GetAreaStatus(), OP_SET);
 		}
 	}
-	
+
 	delete worldmap;
 	worldmap = new_worldmap;
 	CopyResRef(WorldMapName[0], wmResRef);
@@ -4956,6 +4978,8 @@ ieStrRef Interface::GetRumour(const ieResRef dlgref)
 	}
 	Scriptable *pc = game->GetSelectedPCSingle(false);
 
+	// forcefully rerandomize
+	RandomNumValue = RAND_ALL();
 	ieStrRef ret = (ieStrRef) -1;
 	int i = dlg->FindRandomState( pc );
 	if (i>=0 ) {
@@ -5467,7 +5491,7 @@ bool Interface::Autopause(ieDword flag, Scriptable* target)
 	ieDword autopause_flags = 0;
 	vars->Lookup("Auto Pause State", autopause_flags);
 
-	if ((autopause_flags & (1<<flag))) {
+	if (autopause_flags & (1<<flag)) {
 		if (SetPause(PAUSE_ON, PF_QUIET)) {
 			displaymsg->DisplayConstantString(STR_AP_UNUSABLE+flag, DMC_RED);
 

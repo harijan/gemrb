@@ -251,6 +251,9 @@ Targets* GetAllObjects(Map *map, Scriptable* Sender, Object* oC, int ga_flags)
 		tgts = new Targets();
 	}
 	tgts = DoObjectFiltering(Sender, tgts, oC, ga_flags);
+	if (tgts) {
+		tgts->FilterObjectRect(oC);
+	}
 	return tgts;
 }
 
@@ -386,6 +389,10 @@ bool MatchActor(Scriptable *Sender, ieDword actorID, Object* oC)
 		return true;
 	}
 
+	if (!IsInObjectRect(ac->Pos, oC->objectRect)) {
+		return false;
+	}
+
 	bool filtered = false;
 
 	// name matching
@@ -484,7 +491,7 @@ int GetObjectLevelCount(Scriptable* Sender, Object* oC)
 	return count;
 }
 
-Targets *GetMyTarget(Scriptable *Sender, Actor *actor, Targets *parameters, int ga_flags)
+Targets *GetMyTarget(const Scriptable *Sender, const Actor *actor, Targets *parameters, int ga_flags)
 {
 	if (!actor) {
 		if (Sender->Type==ST_ACTOR) {
@@ -554,7 +561,7 @@ Targets *XthNearestOf(Targets *parameters, int count, int ga_flags)
 }
 
 //mygroup means the same specifics as origin
-Targets *XthNearestMyGroupOfType(Scriptable *origin, Targets *parameters, unsigned int count, int ga_flags)
+Targets *XthNearestMyGroupOfType(const Scriptable *origin, Targets *parameters, unsigned int count, int ga_flags)
 {
 	if (origin->Type != ST_ACTOR) {
 		parameters->Clear();
@@ -566,7 +573,7 @@ Targets *XthNearestMyGroupOfType(Scriptable *origin, Targets *parameters, unsign
 	if (!t) {
 		return parameters;
 	}
-	Actor *actor = (Actor *) origin;
+	const Actor *actor = (Actor *) origin;
 	//determining the specifics of origin
 	ieDword type = actor->GetStat(IE_SPECIFIC); //my group
 
@@ -575,7 +582,7 @@ Targets *XthNearestMyGroupOfType(Scriptable *origin, Targets *parameters, unsign
 			t=parameters->RemoveTargetAt(m);
 			continue;
 		}
-		Actor *actor = (Actor *) (t->actor);
+		actor = (Actor *) (t->actor);
 		if (actor->GetStat(IE_SPECIFIC) != type) {
 			t=parameters->RemoveTargetAt(m);
 			continue;
@@ -585,7 +592,7 @@ Targets *XthNearestMyGroupOfType(Scriptable *origin, Targets *parameters, unsign
 	return XthNearestOf(parameters,count, ga_flags);
 }
 
-Targets *ClosestEnemySummoned(Scriptable *origin, Targets *parameters, int ga_flags)
+Targets *ClosestEnemySummoned(const Scriptable *origin, Targets *parameters, int ga_flags)
 {
 	if (origin->Type != ST_ACTOR) {
 		parameters->Clear();
@@ -637,7 +644,7 @@ Targets *ClosestEnemySummoned(Scriptable *origin, Targets *parameters, int ga_fl
 	return parameters;
 }
 
-Targets *XthNearestEnemyOfType(Scriptable *origin, Targets *parameters, unsigned int count, int ga_flags)
+Targets *XthNearestEnemyOfType(const Scriptable *origin, Targets *parameters, unsigned int count, int ga_flags)
 {
 	if (origin->Type != ST_ACTOR) {
 		parameters->Clear();
@@ -649,7 +656,7 @@ Targets *XthNearestEnemyOfType(Scriptable *origin, Targets *parameters, unsigned
 	if (!t) {
 		return parameters;
 	}
-	Actor *actor = (Actor *) origin;
+	const Actor *actor = (Actor *) origin;
 	//determining the allegiance of the origin
 	int type = GetGroup(actor);
 
@@ -664,7 +671,7 @@ Targets *XthNearestEnemyOfType(Scriptable *origin, Targets *parameters, unsigned
 			t=parameters->RemoveTargetAt(m);
 			continue;
 		}
-		Actor *actor = (Actor *) (t->actor);
+		actor = (Actor *) (t->actor);
 		// IDS targeting already did object checks (unless we need to override Detect?)
 		if (!actor->Schedule(gametime, true)) {
 			t = parameters->RemoveTargetAt(m);

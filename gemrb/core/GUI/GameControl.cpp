@@ -41,7 +41,7 @@
 #include "GUI/EventMgr.h"
 #include "GUI/TextArea.h"
 #include "GUI/Window.h"
-#include "RNG/RNG_SFMT.h"
+#include "RNG.h"
 #include "Scriptable/Container.h"
 #include "Scriptable/Door.h"
 #include "Scriptable/InfoPoint.h"
@@ -253,8 +253,7 @@ void GameControl::CreateMovement(Actor *actor, const Point &p, bool append)
 bool GameControl::ShouldRun(Actor *actor) const
 {
 	if (!actor) return false;
-	ieDword speed = actor->CalculateSpeed(true);
-	if (speed != actor->GetStat(IE_MOVEMENTRATE)) {
+	if (actor->GetEncumbranceFactor(true) != 1) {
 		return false;
 	}
 	return (DoubleClick || AlwaysRun);
@@ -452,7 +451,7 @@ void GameControl::DrawInternal(Region& screen)
 		if (d->VisibleTrap(0)) {
 			d->outlineColor = ColorRed; // traps
 		} else if (d->Flags & DOOR_SECRET) {
-			if (DebugFlags & DEBUG_SHOW_DOORS || d->Flags & DOOR_FOUND) {
+			if (d->Flags & DOOR_FOUND) {
 				d->outlineColor = ColorMagenta; // found hidden door
 			} else {
 				// secret door is invisible
@@ -768,21 +767,7 @@ bool GameControl::OnKeyRelease(unsigned char Key, unsigned short Mod)
 					lastActor->GetNextAnimation();
 				}
 				break;
-			case 'b': //draw a path to the target (pathfinder debug)
-				//You need to select an origin with ctrl-o first
-				if (drawPath) {
-					PathNode* nextNode = drawPath->Next;
-					PathNode* thisNode = drawPath;
-					while (true) {
-						delete( thisNode );
-						thisNode = nextNode;
-						if (!thisNode)
-							break;
-						nextNode = thisNode->Next;
-					}
-				}
-				drawPath = core->GetGame()->GetCurrentArea()->FindPath( pfs, p, lastActor?lastActor->size:1 );
-				break;
+			// b
 			case 'c': //force cast a hardcoded spell
 				//caster is the last selected actor
 				//target is the door/actor currently under the pointer
@@ -829,7 +814,7 @@ bool GameControl::OnKeyRelease(unsigned char Key, unsigned short Mod)
 				}
 				if (lastActor && !(lastActor->GetStat(IE_MC_FLAGS)&MC_EXPORTABLE)) {
 					int size = game->GetPartySize(true);
-					if (size < 2 || game->NpcInParty < 2) break;
+					if (size < 2 || lastActor->GetCurrentArea() != game->GetCurrentArea()) break;
 					for (int i = core->Roll(1, size, 0); i < 2*size; i++) {
 						Actor *target = game->GetPC(i%size, true);
 						if (target == lastActor) continue;
@@ -913,12 +898,7 @@ bool GameControl::OnKeyRelease(unsigned char Key, unsigned short Mod)
 			case 'n': //prints a list of all the live actors in the area
 				core->GetGame()->GetCurrentArea()->dump(true);
 				break;
-			case 'o': //set up the origin for the pathfinder
-				// origin
-				pfs.x = lastMouseX;
-				pfs.y = lastMouseY;
-				core->GetVideoDriver()->ConvertToGame( pfs.x, pfs.y );
-				break;
+			// o
 			case 'p': //center on actor
 				ScreenFlags|=SF_CENTERONACTOR;
 				ScreenFlags^=SF_ALWAYSCENTER;
@@ -1264,18 +1244,6 @@ void GameControl::OnMouseOver(unsigned short x, unsigned short y)
 		return;
 	}
 
-	overInfoPoint = area->TMap->GetInfoPoint( p, true );
-	if (overInfoPoint) {
-		//nextCursor = overInfoPoint->Cursor;
-		nextCursor = GetCursorOverInfoPoint(overInfoPoint);
-	}
-	// recheck in case the positioon was different, resulting in a new isVisible check
-	if (nextCursor == IE_CURSOR_INVALID) {
-		Owner->Cursor = IE_CURSOR_BLOCKED;
-		lastCursor = IE_CURSOR_BLOCKED;
-		return;
-	}
-
 	if (overDoor) {
 		overDoor->Highlight = false;
 	}
@@ -1287,18 +1255,46 @@ void GameControl::OnMouseOver(unsigned short x, unsigned short y)
 		lastActor->SetOver( false );
 	}
 
-	overDoor = area->TMap->GetDoor( p );
-	overContainer = area->TMap->GetContainer( p );
+	overInfoPoint = 0;
+	overContainer = 0;
+
+	overDoor = area->TMap->GetDoor(p);
+	// ignore infopoints beneath invisible doors
+	if (!overDoor || overDoor->Visible()) {
+		overInfoPoint = area->TMap->GetInfoPoint(p, true);
+	}
+
+	if (overInfoPoint) {
+		nextCursor = GetCursorOverInfoPoint(overInfoPoint);
+	}
+	// recheck in case the position was different, resulting in a new isVisible check
+	if (nextCursor == IE_CURSOR_INVALID) {
+		Owner->Cursor = IE_CURSOR_BLOCKED;
+		lastCursor = IE_CURSOR_BLOCKED;
+		return;
+	}
+
+	// don't allow summons to try travelling (alone), since it causes tons of loading
+	if (nextCursor == IE_CURSOR_TRAVEL && game->OnlyNPCsSelected()) {
+		Owner->Cursor = IE_CURSOR_BLOCKED;
+		lastCursor = IE_CURSOR_BLOCKED;
+		return;
+	}
+
+	overContainer = area->TMap->GetContainer(p);
 
 	if (!DrawSelectionRect) {
 		if (overDoor) {
 			nextCursor = GetCursorOverDoor(overDoor);
+			if (!overDoor->Visible()) {
+				overDoor = 0;
+			}
 		}
 
 		if (overContainer) {
 			nextCursor = GetCursorOverContainer(overContainer);
 		}
-		// recheck in case the positioon was different, resulting in a new isVisible check
+		// recheck in case the position was different, resulting in a new isVisible check
 		// fixes bg2 long block door in ar0801 above vamp beds, crashing on mouseover (too big)
 		if (nextCursor == IE_CURSOR_INVALID) {
 			Owner->Cursor = IE_CURSOR_BLOCKED;
@@ -1838,7 +1834,8 @@ bool GameControl::HandleActiveRegion(InfoPoint *trap, Actor * actor, Point &p)
 			//there. Here we have to check on the
 			//reset trap and deactivated flags
 			if (trap->Scripts[0]) {
-				if (!(trap->Flags&TRAP_DEACTIVATED) ) {
+				GameControl *gc = core->GetGameControl();
+				if (!(trap->Flags & TRAP_DEACTIVATED) && !(gc->GetDialogueFlags() & DF_FREEZE_SCRIPTS)) {
 					trap->AddTrigger(TriggerEntry(trigger_clicked, actor->GetGlobalID()));
 					actor->LastMarked = trap->GetGlobalID();
 					//directly feeding the event, even if there are actions in the queue
@@ -1931,6 +1928,9 @@ bool GameControl::ShouldTriggerWorldMap(const Actor *pc) const
 {
 	if (!core->HasFeature(GF_TEAM_MOVEMENT)) return false;
 
+	bool keyAreaVisited = CheckVariable(pc, "AR0500_Visited", "GLOBAL") == 1;
+	if (!keyAreaVisited) return false;
+
 	bool teamMoved = (pc->GetInternalFlag() & IF_USEEXIT) && overInfoPoint && overInfoPoint->Type == ST_TRAVEL;
 	if (!teamMoved) return false;
 
@@ -1981,6 +1981,11 @@ void GameControl::OnMouseUp(unsigned short x, unsigned short y, unsigned short B
 		}
 		free( ab );
 		DrawSelectionRect = false;
+		return;
+	}
+
+	if (Owner->Cursor == IE_CURSOR_BLOCKED) {
+		// don't allow travel if the destination is actually blocked
 		return;
 	}
 

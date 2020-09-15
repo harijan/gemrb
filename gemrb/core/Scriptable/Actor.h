@@ -160,6 +160,9 @@ namespace GemRB {
 //cannot target unscheduled actors
 #define GA_NO_UNSCHEDULED 16384
 
+#define GA_ONLY_BUMPABLE 32768
+#define GA_CAN_BUMP 65536
+
 #define VCONST_COUNT 100
 
 //interact types
@@ -331,7 +334,6 @@ public:
 	//which keep a matrix of counters
 	ieDword InteractCount; //this is accessible in iwd2, probably exists in other games too
 	ieDword appearance;
-	int PathTries; //the # of previous tries to pick up a new walkpath
 	ArmorClass AC;
 	ToHitStats ToHit;
 	ModalState Modal;
@@ -446,6 +448,8 @@ private:
 	ieDword GetKitIndex (ieDword kit, ieDword baseclass=0) const;
 	char GetArmorCode() const;
 	const char* GetArmorSound() const;
+	int CalculateSpeedFromRate(bool feedback) const;
+	int CalculateSpeedFromINI(bool feedback) const;
 public:
 	Actor(void);
 	~Actor(void);
@@ -464,7 +468,7 @@ public:
 	/** places the actor on the map */
 	void SetMap(Map *map);
 	/** sets the actor's position, calculating with the nojump flag*/
-	void SetPosition(const Point &position, int jump, int radiusx=0, int radiusy=0);
+	void SetPosition(const Point &nmptTarget, int jump, int radiusx=0, int radiusy=0);
 	/** you better use SetStat, this stuff is only for special cases*/
 	void SetAnimationID(unsigned int AnimID);
 	/** returns the animations */
@@ -478,7 +482,7 @@ public:
 	/** gets saving throws */
 	void RollSaves();
 	/** returns a saving throw */
-	bool GetSavingThrow(ieDword type, int modifier, int spellLevel=0, int saveBonus=0);
+	bool GetSavingThrow(ieDword type, int modifier, const Effect *fx = nullptr);
 	/** Returns true if the actor is targetable */
 	bool ValidTarget(int ga_flags, const Scriptable *checker = NULL) const;
 	/** Clamps a stat value to the valid range for the respective stat */
@@ -510,7 +514,7 @@ public:
 	/* Use overrideSet to replace PCStats->SoundSet */
 	void GetSoundFolder(char *soundset, int flag, ieResRef overrideSet = 0) const;
 	/** Gets the Character Long Name/Short Name */
-	char* GetName(int which) const
+	char* GetName(int which) const override
 	{
 		if(which==-1) which=TalkCount;
 		if (which) {
@@ -552,8 +556,11 @@ public:
 	}
 	void SetName(const char* ptr, unsigned char type);
 	void SetName(int strref, unsigned char type);
+	/* Returns by how much movement speed should be divided to account for loot weight */
+	int GetEncumbranceFactor(bool feedback) const;
 	/* calculates speed, encumbrance etc */
-	int CalculateSpeed(bool feedback);
+	int CalculateSpeed(bool feedback) const;
+	void SetSpeed(bool feedback) { speed = CalculateSpeed(feedback); }
 	/* checks on death of actor, returns true if it should be removed*/
 	bool CheckOnDeath();
 	/* receives undead turning message */
@@ -636,7 +643,7 @@ public:
 	/* assigns actor to party slot, 0 = NPC, areas won't remove it */
 	void SetPersistent(int partyslot);
 	/* resurrects actor */
-	void Resurrect();
+	void Resurrect(const Point &destPoint);
 	/* removes actor in the next update cycle */
 	void DestroySelf();
 	/* schedules actor to die */
@@ -715,7 +722,6 @@ public:
 		unsigned char r, unsigned char g, unsigned char b,
 		int phase=-1 );
 	bool Schedule(ieDword gametime, bool checkhide) const;
-	/* call this when path needs to be changed */
 	void NewPath();
 	/* overridden method, won't walk if dead */
 	void WalkTo(const Point &Des, ieDword flags, int MinDistance = 0);
@@ -748,7 +754,7 @@ public:
 	void UpdateAnimations();
 	/* if necessary, draw actor */
 	void Draw(const Region &screen);
-	bool DoStep(unsigned int walk_speed, ieDword time = 0);
+	void DoStep(unsigned int walkScale, ieDword time = 0) override;
 
 	/* add mobile vvc (spell effects) to actor's list */
 	void AddVVCell(ScriptedAnimation* vvc);
@@ -853,6 +859,8 @@ public:
 	/* Returns an exact copy of this actor */
 	Actor *CopySelf(bool mislead) const;
 	static ieDword GetClassID (const ieDword isclass);
+	const char *GetClassName(ieDword classID) const;
+	const char *GetKitName(ieDword kitID) const;
 	/* Returns the actor's level of the given class */
 	ieDword GetFighterLevel() const { return GetClassLevel(ISFIGHTER); }
 	ieDword GetMageLevel() const { return GetClassLevel(ISMAGE); }
@@ -873,7 +881,7 @@ public:
 	/* true if we are dual-wielding */
 	int IsDualWielding() const;
 	int GetFavoredPenalties() const;
-	bool BlocksSearchMap() const;
+	bool BlocksSearchMap() const override;
 	bool CannotPassEntrance(ieDword exitID) const;
 	void UseExit(ieDword exitID);
 	//int GetReaction() const;
@@ -939,7 +947,7 @@ public:
 	/* set to trap id if current action is disarm; unset after */
 	void SetDisarmingTrap(ieDword trapId) { disarmTrap = trapId; }
 	ieDword GetDisarmingTrap() const { return disarmTrap; }
-	void ReleaseCurrentAction();
+	void ReleaseCurrentAction() override;
 	bool ConcentrationCheck() const;
 	void ApplyEffectCopy(Effect *oldfx, EffectRef &newref, Scriptable *Owner, ieDword param1, ieDword param2);
 	ieDword GetLastRested() { return TicksLastRested; }
@@ -954,6 +962,7 @@ public:
 	void SetAnimatedTalking(unsigned int);
 	bool HasPlayerClass() const;
 	void PlayArmorSound() const;
+	bool ShouldModifyMorale() const;
 };
 }
 

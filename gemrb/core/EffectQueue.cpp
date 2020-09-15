@@ -258,8 +258,6 @@ static inline void ResolveEffectRef(EffectRef &effect_reference)
 
 bool Init_EffectQueue()
 {
-	int i;
-
 	if( initialized) {
 		return true;
 	}
@@ -267,7 +265,7 @@ bool Init_EffectQueue()
 	iwd2fx = !!core->HasFeature(GF_ENHANCED_EFFECTS);
 
 	memset( Opcodes, 0, sizeof( Opcodes ) );
-	for(i=0;i<MAX_EFFECTS;i++) {
+	for (size_t i = 0; i < MAX_EFFECTS; i++) {
 		Opcodes[i].Strref=-1;
 	}
 
@@ -286,7 +284,7 @@ bool Init_EffectQueue()
 		return false;
 	}
 
-	for (i = 0; i < MAX_EFFECTS; i++) {
+	for (long i = 0; i < MAX_EFFECTS; i++) {
 		const char* effectname = effectsTable->GetValue( i );
 		if( efftextTable) {
 			int row = efftextTable->GetRowCount();
@@ -307,11 +305,10 @@ bool Init_EffectQueue()
 			//reverse linking opcode number
 			//using this unused field
 			if( (poi->opcode!=-1) && effectname[0]!='*') {
-				error("EffectQueue", "Clashing Opcodes FN: %d vs. %d, %s\n", i, poi->opcode, effectname);
+				error("EffectQueue", "Clashing Opcodes FN: %ld vs. %d, %s\n", i, poi->opcode, effectname);
 			}
 			poi->opcode = i;
 		}
-		//print("-------- FN: %d, %s", i, effectname);
 	}
 	core->DelSymbol( eT );
 
@@ -472,12 +469,7 @@ Effect *EffectQueue::CreateUnsummonEffect(const Effect *fx)
 		newfx = CreateEffectCopy(fx, fx_unsummon_creature_ref, 0, 0);
 		newfx->TimingMode = FX_DURATION_DELAY_PERMANENT;
 		newfx->Target = FX_TARGET_PRESET;
-		if( newfx->Resource3[0]) {
-			strnuprcpy(newfx->Resource,newfx->Resource3, sizeof(ieResRef)-1 );
-		} else {
-			//FIXME: unhardcode; should probably use a spell hit (shtable) in some way
-			strnuprcpy(newfx->Resource,"SPGFLSH1", sizeof(ieResRef)-1 );
-		}
+		strnuprcpy(newfx->Resource, newfx->Resource3[0] ? newfx->Resource3 : "SPGFLSH1", sizeof(ieResRef) - 1);
 		if( fx->TimingMode == FX_DURATION_ABSOLUTE) {
 			//unprepare duration
 			newfx->Duration = (newfx->Duration-core->GetGame()->GameTime)/AI_UPDATE_TIME;
@@ -1019,7 +1011,7 @@ static int check_type(Actor* actor, const Effect* fx)
 
 	//level decrementing bounce check
 	if (fx->Power) {
-		if( (bounce&BNC_LEVEL_DEC)) {
+		if (bounce & BNC_LEVEL_DEC) {
 			efx=actor->fxqueue.HasEffectWithParamPair(fx_level_bounce_dec_ref, 0, fx->Power);
 			if( efx) {
 				if (DecreaseEffect(efx)) {
@@ -1177,7 +1169,7 @@ static bool check_resistance(Actor* actor, Effect* fx)
 		if( fx->SavingThrowType&(1<<i)) {
 			// FIXME: first bonus handling for iwd2 is just a guess
 			if (iwd2fx) {
-				saved = actor->GetSavingThrow(i, bonus-fx->SavingThrowBonus, fx->SpellLevel, fx->SavingThrowBonus);
+				saved = actor->GetSavingThrow(i, bonus - fx->SavingThrowBonus, fx);
 			} else {
 				saved = actor->GetSavingThrow(i, bonus);
 			}
@@ -1221,7 +1213,6 @@ static bool check_resistance(Actor* actor, Effect* fx)
 
 int EffectQueue::ApplyEffect(Actor* target, Effect* fx, ieDword first_apply, ieDword resistance) const
 {
-	//print("FX 0x%02x: %s(%d, %d)", fx->Opcode, effectnames[fx->Opcode].Name, fx->Parameter1, fx->Parameter2);
 	if (fx->TimingMode == FX_DURATION_JUST_EXPIRED) {
 		return FX_NOT_APPLIED;
 	}
@@ -1276,7 +1267,13 @@ int EffectQueue::ApplyEffect(Actor* target, Effect* fx, ieDword first_apply, ieD
 			if( fx->TimingMode == FX_DURATION_INSTANT_LIMITED) {
 				fx->TimingMode = FX_DURATION_ABSOLUTE;
 			}
-			PrepareDuration(fx);
+			if (pstflags && !(fx->SourceFlags & SF_SIMPLIFIED_DURATION)) {
+				// pst stored the delay in ticks already, so we use a variant of PrepareDuration
+				// unless it's our unhardcoded spells which use iwd2-style simplified duration in rounds per level
+				fx->Duration = (fx->Duration ? fx->Duration : 1) + GameTime;
+			} else {
+				PrepareDuration(fx);
+			}
 		}
 	}
 	//check if the effect has triggered or expired

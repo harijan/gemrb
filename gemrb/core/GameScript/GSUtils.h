@@ -116,25 +116,26 @@ int MoveNearerTo(Scriptable *Sender, const Point &p, int distance, int no_releas
 #define BINARY_MORE 10          //left has more bits than right
 #define BINARY_LESS 11          //left has less bits than right
 
-GEM_EXPORT int GetGroup(Actor *actor);
-GEM_EXPORT Actor *GetNearestOf(Map *map, Actor *origin, int whoseeswho);
-GEM_EXPORT Actor *GetNearestEnemyOf(Map *map, Actor *origin, int whoseeswho);
+GEM_EXPORT int GetGroup(const Actor *actor);
+GEM_EXPORT Actor *GetNearestOf(const Map *map, const Actor *origin, int whoseeswho);
+GEM_EXPORT Actor *GetNearestEnemyOf(const Map *map, const Actor *origin, int whoseeswho);
 GEM_EXPORT void FreeSrc(SrcVector *poi, const ieResRef key);
 GEM_EXPORT SrcVector *LoadSrc(const ieResRef resname);
+bool IsInObjectRect(const Point &pos, const Region &rect);
 Action *ParamCopy(Action *parameters);
 Action *ParamCopyNoOverride(Action *parameters);
 void SetVariable(Scriptable* Sender, const char* VarName, ieDword value);
 Point GetEntryPoint(const char *areaname, const char *entryname);
 //these are used from other plugins
-GEM_EXPORT int CanSee(Scriptable* Sender, Scriptable* target, bool range, int nodead);
+GEM_EXPORT int CanSee(const Scriptable *Sender, const Scriptable *target, bool range, int nodead);
 GEM_EXPORT int SeeCore(Scriptable* Sender, Trigger* parameters, int justlos);
 GEM_EXPORT int DiffCore(ieDword a, ieDword b, int diffmode);
 GEM_EXPORT void DisplayStringCore(Scriptable* const Sender, int Strref, int flags);
 GEM_EXPORT void SetVariable(Scriptable* Sender, const char* VarName, const char* Context, ieDword value);
 bool CreateMovementEffect(Actor* actor, const char *area, const Point &position, int face);
 GEM_EXPORT void MoveBetweenAreasCore(Actor* actor, const char *area, const Point &position, int face, bool adjust);
-GEM_EXPORT ieDword CheckVariable(Scriptable* Sender, const char* VarName, bool *valid = NULL);
-GEM_EXPORT ieDword CheckVariable(Scriptable* Sender, const char* VarName, const char* Context, bool *valid = NULL);
+GEM_EXPORT ieDword CheckVariable(const Scriptable *Sender, const char *VarName, bool *valid = NULL);
+GEM_EXPORT ieDword CheckVariable(const Scriptable *Sender, const char *VarName, const char *Context, bool *valid = NULL);
 GEM_EXPORT bool VariableExists(Scriptable *Sender, const char *VarName, const char *Context);
 Action* GenerateActionCore(const char *src, const char *str, unsigned short actionID);
 Trigger *GenerateTriggerCore(const char *src, const char *str, int trIndex, int negate);

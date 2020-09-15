@@ -23,6 +23,7 @@
 
 #include "exports.h"
 
+#include "CharAnimations.h"
 #include "Variables.h"
 
 #include <list>
@@ -125,6 +126,10 @@ class SpriteCover;
 #define XP_LOCKPICK   0
 #define XP_DISARM     1
 #define XP_LEARNSPELL 2
+
+#define MAX_PATH_TRIES 8
+#define MAX_BUMP_BACK_TRIES 16
+#define MAX_RAND_WALK 10
 
 typedef enum ScriptableType { ST_ACTOR = 0, ST_PROXIMITY = 1, ST_TRIGGER = 2,
 ST_TRAVEL = 3, ST_DOOR = 4, ST_CONTAINER = 5, ST_AREA = 6, ST_GLOBAL = 7 } ScriptableType;
@@ -275,6 +280,7 @@ public:
 	ieDword LastSummoner;
 	ieDword LastFollowed; // gemrb extension (LeaderOf)
 	ieDword LastMarked; // iwd2
+	ieDword MyTarget = 0; // iwd2, has nothing to do with LastTarget
 
 	int LastMarkedSpell; // iwd2
 
@@ -312,7 +318,6 @@ public:
 	const char* GetScriptName() const;
 	Map* GetCurrentArea() const;
 	void SetMap(Map *map);
-	void SetScript(int index, GameScript* script);
 	void SetOverheadText(const String& text, bool display = true);
 	const String& GetOverheadText() { return OverheadText; };
 	bool DisplayOverheadText(bool);
@@ -459,9 +464,28 @@ private: //these seem to be sensitive, so get protection
 
 	PathNode* path; //whole path
 	PathNode* step; //actual step
+	unsigned int prevTicks;
+	int bumpBackTries;
+	bool pathAbandoned;
 protected:
 	ieDword timeStartStep;
+	//the # of previous tries to pick up a new walkpath
+	int pathTries;
+	int randomBackoff;
+	Point oldPos;
+	bool bumped;
+	int pathfindingDistance;
+	int randomWalkCounter;
 public:
+	inline int GetRandomBackoff() const
+	{
+		return randomBackoff;
+	}
+	void Backoff();
+	inline void DecreaseBackoff()
+	{
+		randomBackoff--;
+	}
 	Movable(ScriptableType type);
 	virtual ~Movable(void);
 	Point Destination;
@@ -470,8 +494,16 @@ public:
 	Point HomeLocation;//spawnpoint, return here after rest
 	ieWord maxWalkDistance;//maximum random walk distance from home
 public:
+	inline void ImpedeBumping() { oldPos = Pos; bumped = false; }
+	void AdjustPosition();
+	void BumpAway();
+	void BumpBack();
+	inline bool IsBumped() const { return bumped; }
 	PathNode *GetNextStep(int x);
-	PathNode *GetPath() { return path; };
+	inline PathNode *GetPath() const { return path; };
+	inline int GetPathTries() const	{ return pathTries; }
+	inline void IncrementPathTries() { pathTries++; }
+	inline void ResetPathTries() { pathTries = 0; }
 	int GetPathLength();
 //inliners to protect data consistency
 	inline PathNode * GetStep() {
@@ -479,6 +511,10 @@ public:
 			DoStep((unsigned int) ~0);
 		}
 		return step;
+	}
+
+	inline bool IsMoving() const {
+		return (StanceID == IE_ANI_WALK || StanceID == IE_ANI_RUN);
 	}
 
 	unsigned char GetNextFace();
@@ -494,16 +530,16 @@ public:
 	void SetStance(unsigned int arg);
 	void SetOrientation(int value, bool slow);
 	void SetAttackMoveChances(ieWord *amc);
-	virtual bool DoStep(unsigned int walk_speed, ieDword time = 0);
+	virtual void DoStep(unsigned int walkScale, ieDword time = 0);
 	void AddWayPoint(const Point &Des);
-	void RunAwayFrom(const Point &Des, int PathLength, int flags);
+	void RunAwayFrom(const Point &Des, int PathLength, bool noBackAway);
 	void RandomWalk(bool can_stop, bool run);
-	void MoveLine(int steps, int Pass, ieDword Orient);
-	void FixPosition();
+	int GetRandomWalkCounter() const { return randomWalkCounter; };
+	void MoveLine(int steps, ieDword Orient);
 	void WalkTo(const Point &Des, int MinDistance = 0);
 	void MoveTo(const Point &Des);
 	void Stop();
-	void ClearPath();
+	void ClearPath(bool resetDestination = true);
 
 	/* returns the most likely position of this actor */
 	Point GetMostLikelyPosition();
