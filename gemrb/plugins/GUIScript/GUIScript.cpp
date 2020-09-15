@@ -2020,12 +2020,12 @@ static PyObject* GemRB_Control_QueryText(PyObject * /*self*/, PyObject* args)
 		char* cStr = ConvertCharEncoding(nstring.c_str(),
 		core->TLKEncoding.encoding.c_str(), core->SystemEncoding);
 		if (cStr) {
-		    PyObject* pyStr = PyString_FromString(cStr);
+		    PyObject* pyStr = PyUnicode_FromString(cStr);
 		    free(cStr);
 		    return pyStr;
 		}
 	} else {
-	    return PyString_FromString(nstring.c_str());
+	    return PyUnicode_FromString(nstring.c_str());
 	}
 	Py_RETURN_NONE;
 }
@@ -12316,7 +12316,7 @@ static PyObject* GemRB_GetRumour(PyObject * /*self*/, PyObject* args)
 		return AttributeError( GemRB_GetRumour__doc );
 	}
 	if (RAND(0, 99) >= percent) {
-		return PyInt_FromLong( -1 );
+		return PyLong_FromLong( -1 );
 	}
 
 	ieStrRef strref = core->GetRumour( ResRef );
@@ -14287,10 +14287,10 @@ static PyObject* GemRB_RestParty(PyObject * /*self*/, PyObject* args)
 	}
 	PyDict_SetItemString(dict, "Error", PyBool_FromLong(cannotRest != 0));
 	if (cannotRest) {
-		PyDict_SetItemString(dict, "ErrorMsg", PyInt_FromLong(cannotRest));
+		PyDict_SetItemString(dict, "ErrorMsg", PyLong_FromLong(cannotRest));
 		PyDict_SetItemString(dict, "Cutscene", PyBool_FromLong(0));
 	} else {
-		PyDict_SetItemString(dict, "ErrorMsg", PyInt_FromLong(-1));
+		PyDict_SetItemString(dict, "ErrorMsg", PyLong_FromLong(-1));
 		// all is well, so do the actual resting
 		PyDict_SetItemString(dict, "Cutscene", PyBool_FromLong(game->RestParty(0, dream, hp)));
 	}
