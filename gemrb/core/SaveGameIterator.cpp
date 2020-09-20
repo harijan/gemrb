@@ -125,7 +125,7 @@ SaveGame::SaveGame(const char* path, const char* name, const char* prefix, const
 		Log(ERROR, "SaveGameIterator", "Stat call failed, using dummy time!");
 		strlcpy(Date, "Sun 31 Feb 00:00:01 2099", _MAX_PATH);
 	} else {
-		strftime(Date, _MAX_PATH, "%c", localtime((time_t*)&my_stat.st_mtime));
+		strftime(Date, _MAX_PATH, "%c", localtime(&my_stat.st_mtime));
 	}
 	manager.AddSource(Path, Name, PLUGIN_RESOURCE_DIRECTORY);
 	GameDate[0] = '\0';
@@ -186,15 +186,16 @@ SaveGameIterator::~SaveGameIterator(void)
 {
 }
 
-/* mission pack save */
+// mission pack save dir or the main one?
+static char saveDir[10];
 static const char* SaveDir()
 {
-	ieDword playmode = 0;
-	core->GetDictionary()->Lookup( "SaveDir", playmode );
-	if (playmode == 1) {
-		return "mpsave";
+	if (core->GetTokenDictionary()->GetValueLength("SaveDir")) {
+		core->GetTokenDictionary()->Lookup("SaveDir", saveDir, 9);
+		return saveDir;
+	} else {
+		return "save";
 	}
-	return "save";
 }
 
 #define FormatQuickSavePath(destination, i) \
@@ -267,17 +268,16 @@ static bool IsSaveGameSlot(const char* Path, const char* slotname)
 
 	PathJoinExt(ftmp, dtmp, core->WorldMapName[0], "wmp");
 	if (access( ftmp, R_OK )) {
-		Log(WARNING, "SaveGameIterator", "Ignoring slot %s because of no appropriate worldmap!", dtmp);
 		return false;
 	}
 
-	/* we might need something here as well
-	PathJoinExt(ftmp, dtmp, core->WorldMapName[1], "wmp");
-	if (access( ftmp, R_OK )) {
-		Log(WARNING, "SaveGameIterator", "Ignoring slot %s because of no appropriate worldmap!", dtmp);
-		return false;
+	if (core->WorldMapName[1][0]) {
+		PathJoinExt(ftmp, dtmp, core->WorldMapName[1], "wmp");
+		if (access(ftmp, R_OK)) {
+			Log(WARNING, "SaveGameIterator", "Ignoring slot %s because of no appropriate second worldmap!", dtmp);
+			return false;
+		}
 	}
-	*/
 
 	return true;
 }

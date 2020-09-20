@@ -40,6 +40,7 @@
 #include "Palette.h"
 #include "PalettedImageMgr.h"
 #include "ResourceDesc.h"
+#include "RNG.h"
 #include "SaveGameIterator.h"
 #include "Spell.h"
 #include "TableMgr.h"
@@ -1971,9 +1972,9 @@ static PyObject* GemRB_Window_HasControl(PyObject * /*self*/, PyObject* args)
 PyDoc_STRVAR( GemRB_Control_QueryText__doc,
 "===== Control_QueryText =====\n\
 \n\
-**Prototype:** GemRB.QueryText (WindowIndex, ControlIndex)\n\
+**Prototype:** GemRB.QueryText (WindowIndex, ControlIndex[, UseSystemEncoding])\n\
 \n\
-**Metaclass Prototype:** QueryText ()\n\
+**Metaclass Prototype:** QueryText (UseSystemEncoding=False)\n\
 \n\
 **Description:** Returns the Text of a TextEdit/TextArea/Label control. \n\
 In case of a TextArea, it will return the selected row, not the entire \n\
@@ -1981,6 +1982,7 @@ textarea.\n\
 \n\
 **Parameters:**\n\
   * WindowIndex, ControlIndex - the control's reference\n\
+  * UseSystemEncoding - whether returned text should use OS encoding, False by default\n\
 \n\
 **Return value:** string, may be empty\n\
 \n\
@@ -1991,15 +1993,19 @@ The above example retrieves the character's name typed into the TextEdit control
 \n\
   GemRB.SetToken ('VoiceSet', TextAreaControl.QueryText ())\n\
 The above example sets the VoiceSet token to the value of the selected string in a TextArea control. Later this voiceset could be stored in the character sheet.\n\
+If returned string will be used to e.g. as filename, string should be using system encoding, or file might be not found if it contains non-ASCII letters.\n\
+**Example**\n\
+  Filename = CharImportList.QueryText (True)\n\
+  GemRB.CreatePlayer (Filename, MyChar|0x8000, 1)\n\
 \n\
 **See also:** [[guiscript:Control_SetText]], [[guiscript:SetToken]], [[guiscript:accessing_gui_controls]]"
 );
 
 static PyObject* GemRB_Control_QueryText(PyObject * /*self*/, PyObject* args)
 {
-	int wi, ci;
+	int wi, ci, useSystemEncoding = 0;
 
-	if (!PyArg_ParseTuple( args, "ii", &wi, &ci )) {
+	if (!PyArg_ParseTuple( args, "ii|i", &wi, &ci, &useSystemEncoding )) {
 		return AttributeError( GemRB_Control_QueryText__doc );
 	}
 
@@ -2007,11 +2013,19 @@ static PyObject* GemRB_Control_QueryText(PyObject * /*self*/, PyObject* args)
 	if (!ctrl) {
 		return NULL;
 	}
-	char* cStr = MBCStringFromString(ctrl->QueryText());
-	if (cStr) {
-		PyObject* pyStr = PyUnicode_FromString(cStr);
-		free(cStr);
-		return pyStr;
+
+	String wstring = ctrl->QueryText();
+	std::string nstring(wstring.begin(), wstring.end());
+	if (useSystemEncoding) {
+		char* cStr = ConvertCharEncoding(nstring.c_str(),
+		core->TLKEncoding.encoding.c_str(), core->SystemEncoding);
+		if (cStr) {
+		    PyObject* pyStr = PyUnicode_FromString(cStr);
+		    free(cStr);
+		    return pyStr;
+		}
+	} else {
+	    return PyUnicode_FromString(nstring.c_str());
 	}
 	Py_RETURN_NONE;
 }
@@ -4024,7 +4038,7 @@ static PyObject* GemRB_WorldMap_GetDestinationArea(PyObject * /*self*/, PyObject
 				wm->SetEncounterArea(tmpresref, wal);
 			} else {
 				//regular random encounter, find a valid encounter area
-				int i=rand()%5;
+				int i = RAND(0, 4);
 
 				for(int j=0;j<5;j++) {
 					const char *area = wal->EncounterAreaResRef[(i+j)%5];
@@ -4840,7 +4854,7 @@ static PyObject* GemRB_Button_SetFlags(PyObject * /*self*/, PyObject* args)
 		return NULL;
 	}
 
-	Control* btn = ( Control* ) GetControl(WindowIndex, ControlIndex, IE_GUI_BUTTON);
+	Control *btn = GetControl(WindowIndex, ControlIndex, IE_GUI_BUTTON);
 	if (!btn) {
 		return NULL;
 	}
@@ -4895,7 +4909,7 @@ static PyObject* GemRB_TextArea_SetFlags(PyObject * /*self*/, PyObject* args)
 		return NULL;
 	}
 
-	Control* ta = ( Control* ) GetControl(WindowIndex, ControlIndex, IE_GUI_TEXTAREA);
+	Control *ta = GetControl(WindowIndex, ControlIndex, IE_GUI_TEXTAREA);
 	if (!ta) {
 		return NULL;
 	}
@@ -4935,7 +4949,7 @@ static PyObject* GemRB_ScrollBar_SetDefaultScrollBar(PyObject * /*self*/, PyObje
 		return AttributeError( GemRB_ScrollBar_SetDefaultScrollBar__doc );
 	}
 
-	Control* sb = ( Control* ) GetControl(WindowIndex, ControlIndex, IE_GUI_SCROLLBAR);
+	Control *sb = GetControl(WindowIndex, ControlIndex, IE_GUI_SCROLLBAR);
 	if (!sb) {
 		return NULL;
 	}
@@ -5598,7 +5612,7 @@ sound as if it was said by that PC (EAX).\n\
 \n\
 **Parameters:**\n\
   * SoundResource - a sound resref (the format could be raw pcm, wavc or  ogg; 8/16 bit; mono/stereo). Use the None python object to simply stop the previous sound.\n\
-  * channel - the name of the channel the sound should be played on (optional, defaults to \"GUI\"\n\
+  * channel - the name of the channel the sound should be played on (optional, defaults to 'GUI'\n\
   * xpos - x coordinate of the position where the sound should be played (optional)\n\
   * ypos - y coordinate of the position where the sound should be played (optional)\n\
   * type - defaults to 1, use 4 for speeches or other sounds that should stop the previous sounds (optional)\n\
@@ -6689,7 +6703,10 @@ static PyObject* GemRB_TextArea_ListResources(PyObject * /*self*/, PyObject* arg
 			if (name[0] == '.' || dirit.IsDirectory() != dirs)
 				continue;
 
-			String* string = StringFromCString(name);
+			char * str = ConvertCharEncoding(name, core->SystemEncoding, core->TLKEncoding.encoding.c_str());
+			String* string = StringFromCString(str);
+			free(str);
+
 			if (dirs == false) {
 				size_t pos = string->find_last_of(L'.');
 				if (pos == String::npos || (type == DIRECTORY_CHR_SOUNDS && pos-- == 0)) {
@@ -6698,7 +6715,6 @@ static PyObject* GemRB_TextArea_ListResources(PyObject * /*self*/, PyObject* arg
 				}
 				string->resize(pos);
 			}
-			StringToUpper(*string);
 			strings.push_back(*string);
 			delete string;
 		} while (++dirit);
@@ -6956,7 +6972,7 @@ static PyObject* GemRB_GameSetPartyGold(PyObject * /*self*/, PyObject* args)
 	GET_GAME();
 
 	if (flag) {
-		game->AddGold((ieDword) Gold);
+		game->AddGold(Gold);
 	} else {
 		game->PartyGold=Gold;
 	}
@@ -8926,14 +8942,14 @@ static PyObject* GemRB_GetContainerItem(PyObject * /*self*/, PyObject* args)
 		if (!map) {
 			return RuntimeError("No current area!");
 		}
-		container = map->TMap->GetContainer(actor->Pos, IE_CONTAINER_PILE);
+		container = map->GetPile(actor->Pos);
 	} else {
 		container = core->GetCurrentContainer();
 	}
 	if (!container) {
 		return RuntimeError("No current container!");
 	}
-	if (index>=(int) container->inventory.GetSlotCount()) {
+	if (index >= container->inventory.GetSlotCount()) {
 		Py_RETURN_NONE;
 	}
 	PyObject* dict = PyDict_New();
@@ -9026,7 +9042,7 @@ static PyObject* GemRB_ChangeContainerItem(PyObject * /*self*/, PyObject* args)
 
 	Sound[0]=0;
 	if (action) { //get stuff from container
-		if (Slot<0 || Slot>=(int) container->inventory.GetSlotCount()) {
+		if (Slot < 0 || Slot >= container->inventory.GetSlotCount()) {
 			return RuntimeError("Invalid Container slot!");
 		}
 
@@ -9104,9 +9120,6 @@ static PyObject* GemRB_ChangeContainerItem(PyObject * /*self*/, PyObject* args)
 	if (Sound[0]) {
 		core->GetAudioDrv()->Play(Sound, SFX_CHAN_GUI);
 	}
-
-	//keep weight up to date
-	actor->CalculateSpeed(false);
 	Py_RETURN_NONE;
 }
 
@@ -9553,10 +9566,6 @@ static PyObject* GemRB_ChangeStoreItem(PyObject * /*self*/, PyObject* args)
 			store->RemoveItem(si);
 			delete si;
 		}
-		//keep encumbrance labels up to date
-		if (!rhstore) {
-			actor->CalculateSpeed(false);
-		}
 
 		// play the item's inventory sound
 		ieResRef Sound;
@@ -9671,8 +9680,6 @@ static PyObject* GemRB_ChangeStoreItem(PyObject * /*self*/, PyObject* args)
 				store->AddItem( si );
 			}
 			delete si;
-			//keep encumbrance labels up to date
-			actor->CalculateSpeed(false);
 			res = ASI_SUCCESS;
 		}
 		break;
@@ -9727,7 +9734,7 @@ static PyObject* GemRB_GetStoreItem(PyObject * /*self*/, PyObject* args)
 	if (!store) {
 		return RuntimeError("No current store!");
 	}
-	if (index>=(int) store->GetRealStockSize()) {
+	if (index >= store->GetRealStockSize()) {
 		Log(WARNING, "GUIScript", "Item is not available???");
 		Py_INCREF( Py_None );
 		return Py_None;
@@ -11519,9 +11526,6 @@ static PyObject* GemRB_DragItem(PyObject * /*self*/, PyObject* args)
 		return Py_None;
 	}
 
-	if ((unsigned int) Slot>core->GetInventorySize()) {
-		return AttributeError( "Invalid slot" );
-	}
 	CREItem* si;
 	if (Type) {
 		Map *map = actor->GetCurrentArea();
@@ -11534,10 +11538,11 @@ static PyObject* GemRB_DragItem(PyObject * /*self*/, PyObject* args)
 		}
 		si = cc->RemoveItem(Slot, Count);
 	} else {
+		if ((unsigned int) Slot > core->GetInventorySize()) {
+			return AttributeError("Invalid slot");
+		}
 		si = TryToUnequip( actor, core->QuerySlot(Slot), Count );
 		actor->RefreshEffects(NULL);
-		// make sure the encumbrance labels stay correct
-		actor->CalculateSpeed(false);
 		actor->ReinitQuickSlots();
 		core->SetEventFlag(EF_SELECTION);
 	}
@@ -11742,8 +11747,6 @@ static PyObject* GemRB_DropDraggedItem(PyObject * /*self*/, PyObject* args)
 	if (res) {
 		//release it only when fully placed
 		if (res==ASI_SUCCESS) {
-			// make sure the encumbrance labels stay correct
-			actor->CalculateSpeed(false);
 			core->ReleaseDraggedItem ();
 		}
 		// res == ASI_PARTIAL
@@ -11773,8 +11776,6 @@ static PyObject* GemRB_DropDraggedItem(PyObject * /*self*/, PyObject* args)
 			res = ASI_SWAPPED;
 			//EquipItem (in AddSlotItem) already called RefreshEffects
 			actor->RefreshEffects(NULL);
-			// make sure the encumbrance labels stay correct
-			actor->CalculateSpeed(false);
 			actor->ReinitQuickSlots();
 			core->SetEventFlag(EF_SELECTION);
 		} else {
@@ -11828,6 +11829,7 @@ PyDoc_STRVAR( GemRB_GetSystemVariable__doc,
     * SV_HEIGHT = 2 - screen height\n\
     * SV_GAMEPATH = 3 - game path\n\
     * SV_TOUCH = 4 - are we using touch input mode?\n\
+    * SV_SAVEPATH = 5 - path to the parent of save/mpsave/bpsave dir\n\
 \n\
 **Return value:** This function returns -1 if the index is invalid.\n\
 \n\
@@ -11849,6 +11851,7 @@ static PyObject* GemRB_GetSystemVariable(PyObject * /*self*/, PyObject* args)
 		case SV_HEIGHT: value = core->Height; break;
 		case SV_GAMEPATH: strlcpy(path, core->GamePath, _MAX_PATH); break;
 		case SV_TOUCH: value = core->GetVideoDriver()->TouchInputEnabled(); break;
+		case SV_SAVEPATH: strlcpy(path, core->SavePath, _MAX_PATH); break;
 		default: value = -1; break;
 	}
 	if (path[0]) {
@@ -12312,7 +12315,7 @@ static PyObject* GemRB_GetRumour(PyObject * /*self*/, PyObject* args)
 	if (!PyArg_ParseTuple( args, "is", &percent, &ResRef)) {
 		return AttributeError( GemRB_GetRumour__doc );
 	}
-	if (rand()%100 >= percent) {
+	if (RAND(0, 99) >= percent) {
 		return PyLong_FromLong( -1 );
 	}
 
@@ -13204,7 +13207,8 @@ static PyObject* GemRB_Window_SetupControls(PyObject * /*self*/, PyObject* args)
 			break;
 		case ACT_USE:
 			//returns true if there is ANY equipment
-			if (!actor->inventory.GetEquipmentInfo(NULL, 0, 0)) {
+			ItemExtHeader itemdata;
+			if (!actor->inventory.GetEquipmentInfo(&itemdata, 0, 0)) {
 				state = IE_GUI_BUTTON_DISABLED;
 			}
 			break;
@@ -13805,16 +13809,20 @@ static PyObject* GemRB_PrepareSpontaneousCast(PyObject * /*self*/, PyObject* arg
 PyDoc_STRVAR( GemRB_SpellCast__doc,
 "===== SpellCast =====\n\
 \n\
-**Prototype:** GemRB.SpellCast (PartyID, Type, Spell)\n\
+**Prototype:** GemRB.SpellCast (PartyID, Type, Spell[, ResRef])\n\
 \n\
 **Description:** Makes PartyID cast a spell of Type. This handles targeting \n\
-and executes the appropriate scripting command. If type is -1, then the \n\
-castable spell list will be deleted and no spell will be cast.\n\
+and executes the appropriate scripting command.\n\
 \n\
 **Parameters:**\n\
   * PartyID - player character's index in the party\n\
-  * Type    - spell type bitfield (1-mage, 2-priest, 4-innate)\n\
+  * Type    - switch between casting modes:\n\
+    * spell(book) type bitfield (1-mage, 2-priest, 4-innate and iwd2 versions)\n\
+    * -1: don't cast, but reinit the GUI spell list\n\
+    * -2: cast from a quickspell slot\n\
+    * -3: cast directly, does not require the spell to be memorized\n\
   * Spell   - spell's index in the memorised list\n\
+  * ResRef  - (optional) spell resref for type -3 casts\n\
 \n\
 **Return value:** N/A\n\
 \n\
@@ -13827,8 +13835,9 @@ static PyObject* GemRB_SpellCast(PyObject * /*self*/, PyObject* args)
 	unsigned int globalID;
 	int type;
 	unsigned int spell;
+	ieResRef *resRef;
 
-	if (!PyArg_ParseTuple( args, "iii", &globalID, &type, &spell)) {
+	if (!PyArg_ParseTuple( args, "iii|s", &globalID, &type, &spell, &resRef)) {
 		return AttributeError( GemRB_SpellCast__doc );
 	}
 
@@ -13843,8 +13852,10 @@ static PyObject* GemRB_SpellCast(PyObject * /*self*/, PyObject* args)
 	}
 
 	SpellExtHeader spelldata; // = SpellArray[spell];
-
-	if (type==-2) {
+	if (type == -3) {
+		actor->spellbook.SetCustomSpellInfo(resRef, nullptr, 1);
+		actor->spellbook.GetSpellInfo(&spelldata, 255, 0, 1);
+	} else if (type == -2) {
 		//resolve quick spell slot
 		if (!actor->PCStats) {
 			//no quick slots for this actor, is this an error?
@@ -14242,7 +14253,10 @@ scattered). It is possible to play a movie or dream too.\n\
   * movie - a number, see restmov.2da\n\
   * hp    - hit points healed, 0 means full healing\n\
 \n\
-**Return value:** N/A\n\
+**Return value:** dict\n\
+  * Error: True if resting was prevented by one of the checks\n\
+  * ErrorMsg: a strref with a reason for the error\n\
+  * Cutscene: True if a cutscene needs to run\n\
 \n\
 **See also:** StartStore(gamescript)"
 );
@@ -14257,7 +14271,31 @@ static PyObject* GemRB_RestParty(PyObject * /*self*/, PyObject* args)
 	}
 	GET_GAME();
 
-	return PyLong_FromLong(game->RestParty(noareacheck, dream, hp));
+	// check if resting is possible and if not, return the reason, otherwise rest
+	// Error feedback is eventually handled this way:
+	// - resting outside: popup an error window with the reason in pst, print it to message window elsewhere
+	// - resting in inns: popup a GUISTORE error window with the reason
+	PyObject* dict = PyDict_New();
+	int cannotRest = game->CanPartyRest(noareacheck);
+	// fall back to the generic: you may not rest at this time
+	if (cannotRest == -1) {
+		if (core->HasFeature(GF_AREA_OVERRIDE)) {
+			cannotRest = displaymsg->GetStringReference(STR_MAYNOTREST);
+		} else {
+			cannotRest = 10309;
+		}
+	}
+	PyDict_SetItemString(dict, "Error", PyBool_FromLong(cannotRest != 0));
+	if (cannotRest) {
+		PyDict_SetItemString(dict, "ErrorMsg", PyLong_FromLong(cannotRest));
+		PyDict_SetItemString(dict, "Cutscene", PyBool_FromLong(0));
+	} else {
+		PyDict_SetItemString(dict, "ErrorMsg", PyLong_FromLong(-1));
+		// all is well, so do the actual resting
+		PyDict_SetItemString(dict, "Cutscene", PyBool_FromLong(game->RestParty(0, dream, hp)));
+	}
+
+	return dict;
 }
 
 PyDoc_STRVAR( GemRB_ChargeSpells__doc,
@@ -14590,7 +14628,7 @@ static PyObject* GemRB_StealFailed(PyObject * /*self*/, PyObject* /*args*/)
 		Py_INCREF( Py_None );
 		return Py_None;
 	}
-	Actor* attacker = game->FindPC((int) game->GetSelectedPCSingle() );
+	Actor *attacker = game->FindPC(game->GetSelectedPCSingle());
 	if (!attacker) {
 		Log(WARNING, "GUIScript", "No thief found!");
 		Py_INCREF( Py_None );
@@ -16298,4 +16336,3 @@ PyObject* GUIScript::ConstructObject(const char* type, PyObject* pArgs)
 GEMRB_PLUGIN(0x1B01BE6B, "GUI Script Engine (Python)")
 PLUGIN_CLASS(IE_GUI_SCRIPT_CLASS_ID, GUIScript)
 END_PLUGIN()
-

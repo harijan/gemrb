@@ -71,6 +71,8 @@ GEM_EXPORT void error(const char* owner, const char* message, ...)
 GEM_EXPORT void Log(log_level, const char* owner, const char* message, ...)
 	PRINTF_FORMAT(3, 4);
 
+GEM_EXPORT void LogVA(log_level level, const char* owner, const char* message, va_list args);
+
 GEM_EXPORT void Log(log_level, const char* owner, StringBuffer const&);
 
 #undef PRINTF_FORMAT
@@ -78,12 +80,8 @@ GEM_EXPORT void Log(log_level, const char* owner, StringBuffer const&);
 }
 
 // poison printf
-#if !defined(__MINGW32__)
-#if (__GNUC__ >= 4 && (__GNUC_MINOR__ >= 5 || __GNUC__ > 4))
+#if !defined(__MINGW32__) && defined(__GNUC__)
 extern "C" int printf(const char* message, ...) __attribute__ ((deprecated("GemRB doesn't use printf; use Log instead.")));
-#elif __GNUC__ >= 4
-extern "C" int printf(const char* message, ...) __attribute__ ((deprecated));
-#endif
 #endif
 
 #endif

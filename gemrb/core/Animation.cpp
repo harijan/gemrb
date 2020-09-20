@@ -27,7 +27,7 @@
 #include "Map.h"
 #include "Sprite2D.h"
 #include "Video.h"
-#include "RNG/RNG_SFMT.h"
+#include "RNG.h"
 
 namespace GemRB {
 
@@ -173,7 +173,6 @@ Sprite2D* Animation::NextFrame(void)
 			pos = 0;
 			endReached = true;
 		}
-		starttime = 0;
 	}
 	return ret;
 }

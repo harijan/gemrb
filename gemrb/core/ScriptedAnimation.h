@@ -37,36 +37,55 @@ class Sprite2D;
 //scripted animation flags 
 #define S_ANI_PLAYONCE        8        //(same as area animation)
 
+// transparent 1, translucent 2
 #define IE_VVC_TRANSPARENT	0x00000002
+// translucent shadow 4
 #define IE_VVC_BLENDED		0x00000008
 #define IE_VVC_MIRRORX    	0x00000010
 #define IE_VVC_MIRRORY   	0x00000020
 #define IE_VVC_CLIPPED  	0x00000040
-#define IE_VVC_3D_BLEND         0x00000200
+// IE_VVC_COPYFROMBACK  	0x00000080
+// IE_VVC_CLEARFILL  	0x00000100
+#define IE_VVC_3D_BLEND 	0x00000200 // CVEFVIDCELL_BLT_GLOW in the original
 #define IE_VVC_NOCOVER_2  	0x00000400
 #define IE_VVC_NO_TIMESTOP      0x00000800   //ignore timestop palette
 #define IE_VVC_NO_SEPIA         0x00001000   //ignore dream palette
 #define IE_VVC_2D_BLEND         0x00002000
+// 0x4000, 0x8000 unused
+// start of Colour flags on iesdp (though same field in original bg2)
+// 0x10000 Not light source
+// 0x20000 Light source
 #define IE_VVC_TINT     	0x00030000   //2 bits need to be set for tint
+// 0x40000 Internal brightness
 #define IE_VVC_GREYSCALE	0x00080000   //timestopped palette
-#define IE_VVC_DARKEN           0x00100000   //this is unsure
+#define IE_VVC_DARKEN       0x00100000   // unused
 #define IE_VVC_GLOWING  	0x00200000   //internal gamma
+// 0x00400000 Non-reserved palette
+// 0x00800000 Full palette
+// 0x01000000 Unused
 #define IE_VVC_SEPIA		0x02000000   //dream palette
 
 #define IE_VVC_LOOP		0x00000001
-#define IE_VVC_LIGHTSPOT        0x00000002   //draw lightspot
+#define IE_VVC_LIGHTSPOT        0x00000002   //draw lightspot; CVEFVIDCELL_GLOW
 #define IE_VVC_HEIGHT           0x00000004
 #define IE_VVC_BAM		0x00000008
 #define IE_VVC_OWN_PAL  	0x00000010
+// original: CVEFVIDCELL_DELETED  	0x00000020 //Used by linked effect
 //#define IE_VVC_PURGEABLE	0x00000020 // purge on next ai update; uses unknown
-#define IE_VVC_NOCOVER		0x00000040
-#define IE_VVC_MID_BRIGHTEN 	0x00000080
-#define IE_VVC_HIGH_BRIGHTEN	0x00000100
+#define IE_VVC_NOCOVER		0x00000040 // CVEFVIDCELL_DONOTCLIP
+#define IE_VVC_MID_BRIGHTEN 	0x00000080 // CVEFVIDCELL_BRIGHTEN3DONLYOFF
+#define IE_VVC_HIGH_BRIGHTEN	0x00000100 // CVEFVIDCELL_BRIGHTENIFFAST
 
 
 //#define IE_VVC_UNUSED           0xe0000000U
 //gemrb specific sequence flags
 #define IE_VVC_FREEZE     0x80000000
+
+//orientation flags
+#define IE_VVC_FACE_TARGET		0x00000001
+#define IE_VVC_FACE_TARGET_DIRECTION	0x00000002 // follow target
+#define IE_VVC_FACE_TRAVEL_DIRECTION	0x00000004 // follow path
+#define IE_VVC_FACE_FIXED		0x00000008
 
 //phases
 #define P_NOTINITED -1
@@ -81,10 +100,9 @@ public:
 	ScriptedAnimation(DataStream* stream);
 	void Init();
 	void LoadAnimationFactory(AnimationFactory *af, int gettwin = 0);
-	void Override(ScriptedAnimation *templ);
 	//there are 3 phases: start, hold, release
 	//it will usually cycle in the 2. phase
-	//the anims could also be used 'orientation based' if FaceTarget is
+	//the anims could also be used 'orientation based' if NumOrientations is
 	//set to 5, 9, 16
 	Animation* anims[3*MAX_ORIENT];
 	//there is only one palette
@@ -101,13 +119,15 @@ public:
 	ieDword LightX, LightY, LightZ;
 	Sprite2D* light;//this is just a round/halftrans sprite, has no animation
 	ieDword FrameRate;
-	ieDword FaceTarget;
-	ieByte Orientation;
+	ieDword NumOrientations;
+	ieDword Orientation;
+	ieDword OrientationFlags;
 	ieDword Duration;
 	ieDword Delay;
 	bool justCreated;
 	ieResRef ResName;
 	int Phase;
+	int SoundPhase;
 	SpriteCover* cover;
 	ScriptedAnimation *twin;
 	bool active;
@@ -133,8 +153,8 @@ public:
 	void SetSpriteCover(SpriteCover* c) { delete cover; cover = c; }
 	/* get stored SpriteCover */
 	SpriteCover* GetSpriteCover() const { return cover; }
-	int GetCurrentFrame();
-	ieDword GetSequenceDuration(ieDword multiplier);
+	int GetCurrentFrame() const;
+	ieDword GetSequenceDuration(ieDword multiplier) const;
 	/* sets up a delay in the beginning of the vvc */
 	void SetDelay(ieDword delay);
 	/* sets default duration if it wasn't set yet */
@@ -152,10 +172,15 @@ public:
 	/* returns possible twin after altering it to become underlay */
 	ScriptedAnimation *DetachTwin();
 private:
-	void PrepareAnimation(Animation *anim, ieDword Transparency);
+	Animation *PrepareAnimation(AnimationFactory *af, unsigned int cycle, unsigned int i, bool loop = false);
 	void PreparePalette();
 	bool HandlePhase(Sprite2D *&frame);
 	void GetPaletteCopy();
+	void IncrementPhase();
+	/* stops any sound playing */
+	void StopSound();
+	/* updates the sound playing */
+	void UpdateSound(const Point &pos);
 };
 
 }

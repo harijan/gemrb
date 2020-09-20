@@ -59,6 +59,7 @@ FILE(GLOB gemrb_core_LIB_SRCS
 	Palette.cpp
 	PalettedImageMgr.cpp
 	Particles.cpp
+	PathFinder.cpp
 	Plugin.cpp
 	PluginLoader.cpp
 	PluginMgr.cpp
@@ -120,8 +121,7 @@ FILE(GLOB gemrb_core_LIB_SRCS
 	GUI/TextSystem/TextContainer.cpp
 	GUI/Window.cpp
 	GUI/WorldMapControl.cpp
-	RNG/RNG_SFMT.cpp
-	RNG/sfmt/SFMT.c
+	RNG.cpp
 	Scriptable/Actor.cpp
 	Scriptable/CombatInfo.cpp
 	Scriptable/Container.cpp
@@ -131,6 +131,7 @@ FILE(GLOB gemrb_core_LIB_SRCS
 	Scriptable/PCStatStruct.cpp
 	System/DataStream.cpp
 	System/FileStream.cpp
+	System/MappedFileMemoryStream.cpp
 	System/MemoryStream.cpp
 	System/Logger.cpp
 	System/Logger/File.cpp
@@ -145,12 +146,25 @@ FILE(GLOB gemrb_core_LIB_SRCS
 	${PLATFORM_SRC}
 	)
 
+IF(WIN32 AND HAVE_ICONV)
+	SET(gemrb_core_LIB_SRCS
+		${gemrb_core_LIB_SRCS}
+		CodepageToIconv.cpp
+		CodepageToIconvMap.cpp
+	)
+	INCLUDE_DIRECTORIES(${ICONV_INCLUDE_DIR})
+ENDIF()
+
 if (STATIC_LINK)
 	ADD_LIBRARY(gemrb_core STATIC ${gemrb_core_LIB_SRCS})
 else (STATIC_LINK)
 	ADD_LIBRARY(gemrb_core SHARED ${gemrb_core_LIB_SRCS})
 	TARGET_LINK_LIBRARIES(gemrb_core ${CMAKE_DL_LIBS} ${COREFOUNDATION_LIBRARY})
+	IF (HAVE_ICONV)
+		TARGET_LINK_LIBRARIES(gemrb_core ${ICONV_LIBRARY})
+	ENDIF()
 	IF(WIN32)
+	  SET_TARGET_PROPERTIES(gemrb_core PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/gemrb )
 	  INSTALL(TARGETS gemrb_core RUNTIME DESTINATION ${LIB_DIR})
 	ELSE(WIN32)
 	  INSTALL(TARGETS gemrb_core LIBRARY DESTINATION ${LIB_DIR})

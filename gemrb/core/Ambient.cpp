@@ -19,7 +19,7 @@
  */
  
 #include "Ambient.h"
-#include "RNG/RNG_SFMT.h"
+#include "RNG.h"
 
 #include <algorithm>
 
@@ -55,7 +55,7 @@ ieDword Ambient::getTotalInterval() const
 {
 	ieDword i = interval;
 	if (intervalVariance != 0) {
-		ieWord var = std::min(intervalVariance, (ieDword) (interval/2));
+		ieWord var = std::min(intervalVariance, interval / 2);
 		i += RAND(0, 2 * var) - var;
 	}
 	return i;
