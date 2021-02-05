@@ -22,6 +22,7 @@
 #include "win32def.h"
 #include "strrefs.h"
 #include "ie_cursors.h"
+#include "voodooconst.h"
 
 #include "DialogHandler.h"
 #include "DisplayMessage.h"
@@ -194,9 +195,9 @@ void Scriptable::SetScript(const ieResRef aScript, int idx, bool ai)
 		delete Scripts[idx];
 	}
 	Scripts[idx] = NULL;
-	// NONE is an 'invalid' script name, never used seriously
-	// This hack is to prevent flooding of the console
-	if (aScript[0] && stricmp(aScript, "NONE") ) {
+	// NONE is an 'invalid' script name, seldomly used to reset the slot, which we do above
+	// This check is to prevent flooding of the console
+	if (aScript[0] && stricmp(aScript, "NONE")) {
 		if (idx!=AI_SCRIPT_LEVEL) ai = false;
 		Scripts[idx] = new GameScript( aScript, this, idx, ai );
 	}
@@ -374,7 +375,7 @@ void Scriptable::TickScripting()
 
 void Scriptable::ExecuteScript(int scriptCount)
 {
-	GameControl *gc = core->GetGameControl();
+	const GameControl *gc = core->GetGameControl();
 
 	// area scripts still run for at least the current area, in bg1 (see ar2631, confirmed by testing)
 	// but not in bg2 (kill Abazigal in ar6005)
@@ -410,7 +411,10 @@ void Scriptable::ExecuteScript(int scriptCount)
 	}
 
 	// don't run scripts if we're in dialog
-	if ((gc->GetDialogueFlags() & DF_IN_DIALOG) && gc->dialoghandler->InDialog(this) &&
+	// ... if it's a script-blocking one (exceptions only possible in bg2, see use of GF_FORCE_DIALOGPAUSE)
+	constexpr int freezingDLG = DF_IN_DIALOG | DF_FREEZE_SCRIPTS;
+	if ((gc->GetDialogueFlags() & freezingDLG) == freezingDLG &&
+		gc->dialoghandler->InDialog(this) &&
 		(!act || act->Modified[IE_IGNOREDIALOGPAUSE] == 0)) {
 		return;
 	}
@@ -579,7 +583,7 @@ void Scriptable::ProcessActions()
 		}
 		if (!CurrentAction) {
 			ClearActions();
-			lastAction = -1;
+			// clear lastAction here if you'll ever need it after exiting the loop
 			break;
 		}
 		lastAction = CurrentAction->actionID;
@@ -623,7 +627,7 @@ unsigned long Scriptable::GetWait() const
 	return WaitCounter;
 }
 
-void Scriptable::LeaveDialog()
+void Scriptable::LeftDialog()
 {
 	AddTrigger(TriggerEntry(trigger_wasindialog));
 }
@@ -688,12 +692,24 @@ void Scriptable::AddTrigger(TriggerEntry trigger)
 {
 	triggers.push_back(trigger);
 	ImmediateEvent();
+	SetLastTrigger(trigger.triggerID, trigger.param1);
+}
 
-	assert(trigger.triggerID < MAX_TRIGGERS);
-	if (triggerflags[trigger.triggerID] & TF_SAVED) {
+// plenty of triggers in svitrobj don't send trigger messages and so never see the code in AddTrigger
+void Scriptable::SetLastTrigger(ieDword triggerID, ieDword globalID)
+{
+	assert(triggerID < MAX_TRIGGERS);
+	if (triggerflags[triggerID] & TF_SAVED) {
 		//TODO: if LastTrigger is still overwritten by script action blocks, store this in a separate field and copy it back when the block ends
-		//Log(WARNING, "Scriptable", "%s: Added LastTrigger: %d for trigger %d\n", scriptName, trigger.param1, trigger.triggerID);
-		LastTrigger = trigger.param1;
+		const char *name = "none";
+		if (area) {
+			Scriptable *scr = area->GetScriptableByGlobalID(globalID);
+			if (scr) {
+				name = scr->GetScriptName();
+			}
+		}
+		ScriptDebugLog(ID_TRIGGERS, "Scriptable", "%s: Added LastTrigger: %d (%s) for trigger %d\n", scriptName, globalID, name, triggerID);
+		LastTrigger = globalID;
 	}
 }
 
@@ -710,29 +726,24 @@ bool Scriptable::MatchTrigger(unsigned short id, ieDword param) {
 	return false;
 }
 
-bool Scriptable::MatchTriggerWithObject(unsigned short id, const Object *obj, ieDword param) {
-	for (std::list<TriggerEntry>::iterator m = triggers.begin(); m != triggers.end (); m++) {
-		TriggerEntry &trigger = *m;
-		if (trigger.triggerID != id)
-			continue;
-		if (param && trigger.param2 != param)
-			continue;
-		if (!MatchActor(this, trigger.param1, obj))
-			continue;
+bool Scriptable::MatchTriggerWithObject(unsigned short id, const Object *obj, ieDword param) const
+{
+	for (auto& trigger : triggers) {
+		if (trigger.triggerID != id) continue;
+		if (param && trigger.param2 != param) continue;
+		if (!MatchActor(this, trigger.param1, obj)) continue;
 		return true;
 	}
 
 	return false;
 }
 
-const TriggerEntry *Scriptable::GetMatchingTrigger(unsigned short id, unsigned int notflags) {
-	for (std::list<TriggerEntry>::iterator m = triggers.begin(); m != triggers.end (); ++m) {
-		TriggerEntry &trigger = *m;
-		if (trigger.triggerID != id)
-			continue;
-		if (notflags & trigger.flags)
-			continue;
-		return &*m;
+const TriggerEntry *Scriptable::GetMatchingTrigger(unsigned short id, unsigned int notflags) const
+{
+	for (auto& trigger : triggers) {
+		if (trigger.triggerID != id) continue;
+		if (notflags & trigger.flags) continue;
+		return &trigger;
 	}
 
 	return NULL;
@@ -1909,7 +1920,9 @@ bool Highlightable::TriggerTrap(int /*skill*/, ieDword ID)
 
 	// the second part is a hack to deal with bg2's ar1401 lava floor trap ("muck"), which doesn't have the repeating bit set
 	// should we always send Entered instead, also when !Trapped? Does not appear so, see history of InfoPoint::TriggerTrap
-	if (!TrapResets() && (TrapDetectionDiff && TrapRemovalDiff)) {
+	if (TrapResets()) {
+		AddTrigger(TriggerEntry(trigger_reset, GetGlobalID()));
+	} else if (TrapDetectionDiff && TrapRemovalDiff) {
 		Trapped = false;
 	}
 	return true;
@@ -1920,7 +1933,7 @@ bool Highlightable::TryUnlock(Actor *actor, bool removekey) {
 	Actor *haskey = NULL;
 
 	if (Key && actor->InParty) {
-		Game *game = core->GetGame();
+		const Game *game = core->GetGame();
 		//allow unlock when the key is on any partymember
 		for (int idx = 0; idx < game->GetPartySize(false); idx++) {
 			Actor *pc = game->FindPC(idx + 1);
@@ -2219,8 +2232,6 @@ void Movable::BumpBack()
 // for a random time (inspired by network media access control algorithms) or just stops if
 // the goal is close enough.
 void Movable::DoStep(unsigned int walkScale, ieDword time) {
-	const int XEPS = 72;
-	const int YEPS = 36;
 	Actor *actor = nullptr;
 	if (Type == ST_ACTOR) actor = (Actor*)this;
 	// Only bump back if not moving
@@ -2262,11 +2273,12 @@ void Movable::DoStep(unsigned int walkScale, ieDword time) {
 
 		if (BlocksSearchMap() && actorInTheWay && actorInTheWay != this && actorInTheWay->BlocksSearchMap()) {
 			// Give up instead of bumping if you are close to the goal
-			if (!(step->Next) && std::abs(nmptStep.x - Pos.x) < XEPS && std::abs(nmptStep.y - Pos.y) < YEPS) {
+			if (!(step->Next) && PersonalDistance(nmptStep, this) < MAX_OPERATING_DISTANCE) {
 				ClearPath(true);
 				NewOrientation = Orientation;
 				// Do not call ReleaseCurrentAction() since other actions
 				// than MoveToPoint can cause movement
+				Log(DEBUG, "PathFinderWIP", "Abandoning because I'm close to the goal");
 				pathAbandoned = true;
 				return;
 			}
@@ -2395,11 +2407,40 @@ void Movable::RandomWalk(bool can_stop, bool run)
 		return;
 	}
 	//if not continous random walk, then stops for a while
-	if (can_stop && RAND(0, 9) < 4) {
-		if (RAND(0, 2)) SetOrientation(RAND(0, MAX_ORIENT), true);
-		SetWait(RAND(core->Time.round_size / 2, 2 * core->Time.round_size));
+	if (can_stop) {
+		Region vp = core->GetVideoDriver()->GetViewport();
+		if (!vp.PointInside(Pos)) {
+			SetWait(AI_UPDATE_TIME * core->Roll(1, 40, 0));
+			return;
+		}
+		// a 50/50 chance to move or do a spin (including its own wait)
+		if (RAND(1, 2) == 1) {
+			Action *me = ParamCopy(CurrentAction);
+			Action *turnAction = GenerateAction("RandomTurn()");
+			// only spin once before relinquishing control back
+			turnAction->int0Parameter = 3;
+			// remove and readd ourselves, so the turning gets a chance to run
+			ReleaseCurrentAction();
+			AddActionInFront(me);
+			AddActionInFront(turnAction);
+			return;
+		}
+	}
+
+	// handle the RandomWalkTime variants, which only count moves
+	if (CurrentAction->int0Parameter && !CurrentAction->int1Parameter) {
+		// first run only
+		CurrentAction->int1Parameter = 1;
+		CurrentAction->int0Parameter++;
+	}
+	if (CurrentAction->int0Parameter) {
+		CurrentAction->int0Parameter--;
+	}
+	if (CurrentAction->int1Parameter && !CurrentAction->int0Parameter) {
+		ReleaseCurrentAction();
 		return;
 	}
+
 	randomWalkCounter++;
 	if (randomWalkCounter > MAX_RAND_WALK) {
 		randomWalkCounter = 0;

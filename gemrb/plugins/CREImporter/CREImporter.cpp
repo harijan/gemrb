@@ -863,7 +863,7 @@ void CREImporter::SetupColor(ieDword &stat)
 	if (stat < 200 || RandColor == 0) return;
 
 	// unfortunately this can't go to Initializer, since at that point search paths aren't set up yet
-	int RandRows = 0;
+	size_t RandRows = 0;
 	if (randcolors.size() == 0) {
 		AutoTable rndcol("randcolr", true);
 		if (rndcol) {
@@ -878,8 +878,8 @@ void CREImporter::SetupColor(ieDword &stat)
 		randcolors.resize(RandColor);
 		for (int cols = RandColor - 1; cols >= 0; cols--) {
 			randcolors[cols] = std::vector<unsigned char>(RandRows);
-			for (int i = 0; i < RandRows; i++) {
-				randcolors[cols][i] = atoi(rndcol->QueryField(i, cols));
+			for (size_t i = 0; i < RandRows; i++) {
+				randcolors[cols][i] = atoi(rndcol->QueryField(static_cast<unsigned int>(i), cols));
 			}
 			randcolors[cols][0] -= 200;
 		}
@@ -928,6 +928,9 @@ Actor* CREImporter::GetActor(unsigned char is_in_party)
 	act->SetName( poi, 1 ); //setting longname
 	free( poi );
 	str->ReadDword( &act->ShortStrRef );
+	if (act->ShortStrRef == (ieStrRef) -1) {
+		act->ShortStrRef = act->LongStrRef;
+	}
 	poi = core->GetCString( act->ShortStrRef );
 	act->SetName( poi, 2 ); //setting shortname (for tooltips)
 	free( poi );
@@ -942,7 +945,7 @@ Actor* CREImporter::GetActor(unsigned char is_in_party)
 	ieWordSigned tmps;
 	str->ReadWordSigned( &tmps );
 	act->BaseStats[IE_HITPOINTS]=(ieDwordSigned)tmps;
-	if (tmps <= 0) {
+	if (tmps <= 0 && ((ieDwordSigned) act->BaseStats[IE_XPVALUE]) < 0) {
 		act->BaseStats[IE_STATE_ID] |= STATE_DEAD;
 	}
 	str->ReadWord( &tmp );

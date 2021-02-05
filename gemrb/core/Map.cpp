@@ -553,7 +553,7 @@ void Map::MoveToNewArea(const char *area, const char *entrance, unsigned int dir
 		face = ent->Face;
 	}
 	//LeaveArea is the same in ALL engine versions
-	sprintf(command, "LeaveArea(\"%s\",[%d.%d],%d)", area, X, Y, face);
+	snprintf(command, sizeof(command), "LeaveArea(\"%s\",[%d.%d],%d)", area, X, Y, face);
 
 	if (EveryOne&CT_GO_CLOSER) {
 		int i=game->GetPartySize(false);
@@ -738,6 +738,7 @@ void Map::UpdateScripts()
 			//it looks like STATE_SLEEP allows scripts, probably it is STATE_HELPLESS what disables scripts
 			//if that isn't true either, remove this block completely
 			if (actor->GetStat(IE_STATE_ID) & STATE_HELPLESS) {
+				actor->SetInternalFlag(IF_JUSTDIED, OP_NAND);
 				continue;
 			}
 		}
@@ -772,7 +773,7 @@ void Map::UpdateScripts()
 	q = Qcount[PR_SCRIPT];
 	while (q--) {
 		Actor* actor = queue[PR_SCRIPT][q];
-		if (actor->GetRandomBackoff() || !actor->GetStep() || actor->speed == 0) {
+		if (actor->GetRandomBackoff() || !actor->GetStep() || actor->GetSpeed() == 0) {
 			continue;
 		}
 		Actor* nearActor = GetActorInRadius(actor->Pos, GA_NO_DEAD|GA_NO_UNSCHEDULED, actor->GetAnims()->GetCircleSize());
@@ -786,12 +787,12 @@ void Map::UpdateScripts()
 		Actor* actor = queue[PR_SCRIPT][q];
 		if (actor->GetRandomBackoff()) {
 			actor->DecreaseBackoff();
-			if (!actor->GetRandomBackoff() && actor->speed > 0) {
+			if (!actor->GetRandomBackoff() && actor->GetSpeed() > 0) {
 				actor->NewPath();
 			}
 			continue;
 		}
-		DoStepForActor(actor, actor->speed, time);
+		DoStepForActor(actor, time);
 	}
 
 
@@ -886,8 +887,9 @@ void Map::ResolveTerrainSound(ieResRef &sound, Point &Pos) const
 	}
 }
 
-void Map::DoStepForActor(Actor *actor, int walkScale, ieDword time) const
+void Map::DoStepForActor(Actor *actor, ieDword time) const
 {
+	int walkScale = actor->GetSpeed();
 	// Immobile, dead and actors in another map can't walk here
 	if (actor->Immobile() || walkScale == 0 || actor->GetCurrentArea() != this
 		|| !actor->ValidTarget(GA_NO_DEAD)) {
@@ -1388,7 +1390,7 @@ int Map::CountSummons(ieDword flags, ieDword sex) const
 	return count;
 }
 
-bool Map::AnyEnemyNearPoint(const Point &p)
+bool Map::AnyEnemyNearPoint(const Point &p) const
 {
 	ieDword gametime = core->GetGame()->GameTime;
 	for (const Actor *actor : actors) {
@@ -1444,6 +1446,8 @@ void Map::InitActors()
 	while (i--) {
 		Actor *actor = actors[i];
 		actor->SetMap(this);
+		// make sure to bump away in case someone or something is already there
+		actor->SetPosition(actor->Pos, 1);
 		InitActor(actor);
 	}
 }
@@ -2010,7 +2014,7 @@ unsigned int Map::GetBlockedInLine(const Point &s, const Point &d, bool stopOnIm
 	while (p != d) {
 		double dx = d.x - p.x;
 		double dy = d.y - p.y;
-		double factor = caller && caller->speed ? double(gamedata->GetStepTime()) / double(caller->speed) : 1;
+		double factor = caller && caller->GetSpeed() ? double(gamedata->GetStepTime()) / double(caller->GetSpeed()) : 1;
 		NormalizeDeltas(dx, dy, factor);
 		p.x += dx;
 		p.y += dy;
@@ -2207,7 +2211,7 @@ void Map::SortQueues()
 	}
 }
 
-void Map::AddProjectile(Projectile* pro, const Point &source, ieWord actorID, bool fake)
+void Map::AddProjectile(Projectile *pro, const Point &source, ieDword actorID, bool fake)
 {
 	proIterator iter;
 
@@ -2468,7 +2472,7 @@ void Map::AdjustPosition(SearchmapPoint &goal, unsigned int radiusx, unsigned in
 			if (AdjustPositionX(goal, radiusx, radiusy)) {
 				return;
 			}
-			if (AdjustPositionY(goal, radiusy, radiusx)) {
+			if (AdjustPositionY(goal, radiusx, radiusy)) {
 				return;
 			}
 		} else {
@@ -2544,11 +2548,11 @@ void Map::SetupAmbients()
 	ambim->setAmbients( ambients );
 }
 
-unsigned int Map::GetAmbientCount(bool toSave) const
+ieWord Map::GetAmbientCount(bool toSave) const
 {
-	if (!toSave) return (unsigned int) ambients.size();
+	if (!toSave) return static_cast<ieWord>(ambients.size());
 
-	unsigned int ambiCount = 0;
+	ieWord ambiCount = 0;
 	for (const Ambient *ambient : ambients) {
 		if (!(ambient->flags & IE_AMBI_NOSAVE)) ambiCount++;
 	}
@@ -2885,7 +2889,7 @@ void Map::BlockSearchMap(const Point &Pos, unsigned int size, unsigned int value
 	// actor. This matches the behaviour of the original BG2.
 
 	if (size > MAX_CIRCLESIZE) size = MAX_CIRCLESIZE;
-	if (size < 2) size = 2;
+	if (size < 1) size = 1;
 	unsigned int ppx = Pos.x/16;
 	unsigned int ppy = Pos.y/12;
 	unsigned int r=(size-1)*(size-1)+1;
@@ -3066,7 +3070,7 @@ Container *Map::GetPile(Point position)
 	//converting to search square
 	position.x=position.x/16;
 	position.y=position.y/12;
-	sprintf(heapname,"heap_%hd.%hd",position.x,position.y);
+	snprintf(heapname, sizeof(heapname), "heap_%hd.%hd", position.x, position.y);
 	//pixel position is centered on search square
 	position.x=position.x*16+8;
 	position.y=position.y*12+6;

@@ -127,7 +127,7 @@ void InitScriptTables()
 	}
 }
 
-int GetReaction(Actor *target, Scriptable *Sender)
+int GetReaction(const Actor *target, const Scriptable *Sender)
 {
 	int chr, rep, reaction;
 
@@ -146,18 +146,18 @@ int GetReaction(Actor *target, Scriptable *Sender)
 
 	// add -4 penalty when dealing with racial enemies
 	if (Sender && target->GetRangerLevel() && (Sender->Type == ST_ACTOR) ) {
-		reaction -= target->GetRacialEnemyBonus((Actor *) Sender);
+		reaction -= target->GetRacialEnemyBonus((const Actor *) Sender);
 	}
 
 	return reaction;
 }
 
-int GetHappiness(Scriptable* Sender, int reputation)
+int GetHappiness(const Scriptable *Sender, int reputation)
 {
 	if (Sender->Type != ST_ACTOR) {
 		return 0;
 	}
-	Actor* ab = ( Actor* ) Sender;
+	const Actor *ab = (const Actor *) Sender;
 	int alignment = ab->GetStat(IE_ALIGNMENT)&AL_GE_MASK; //good / evil
 	// handle unset alignment
 	if (!alignment) {
@@ -167,12 +167,12 @@ int GetHappiness(Scriptable* Sender, int reputation)
 	return happiness[alignment-1][reputation/10-1];
 }
 
-int GetHPPercent(Scriptable* Sender)
+int GetHPPercent(const Scriptable *Sender)
 {
 	if (Sender->Type != ST_ACTOR) {
 		return 0;
 	}
-	Actor* ab = ( Actor* ) Sender;
+	const Actor *ab = (const Actor *) Sender;
 	int hp1 = ab->GetStat(IE_MAXHITPOINTS);
 	if (hp1<1) {
 		return 0;
@@ -396,7 +396,7 @@ void TransformItemCore(Actor *actor, Action *parameters, bool onlyone)
 }
 
 //check if an inventory (container or actor) has item (could be recursive ?)
-bool HasItemCore(Inventory *inventory, const ieResRef itemname, ieDword flags)
+bool HasItemCore(const Inventory *inventory, const ieResRef itemname, ieDword flags)
 {
 	if (inventory->HasItem(itemname, flags)) {
 		return true;
@@ -495,6 +495,13 @@ void DisplayStringCore(Scriptable* const Sender, int Strref, int flags)
 		} else if (actor->GetStat(IE_EA) >= EA_EVILCUTOFF) {
 			channel = SFX_CHAN_MONSTER;
 		}
+	}
+
+	// PST does not echo verbal constants in the console, their strings
+	// actually contain development related identifying comments
+	// thus the console flag is unset.
+	if (core->HasFeature(GF_ONSCREEN_TEXT)) {
+		flags &= ~DS_CONSOLE;
 	}
 
 	if ((Strref != -1) && !soundRef[0]) {
@@ -608,7 +615,8 @@ int SeeCore(Scriptable *Sender, const Trigger *parameters, int justlos)
 	//both are actors
 	if (CanSee(Sender, tar, true, flags) ) {
 		if (justlos) {
-			//TODO: maybe set the object references here too
+			//TODO: maybe set the other object references here too
+			Sender->LastTrigger = tar->GetGlobalID();
 			return 1;
 		}
 		// NOTE: Detect supposedly doesn't set LastMarked — disable on GA_DETECT if needed
@@ -618,6 +626,7 @@ int SeeCore(Scriptable *Sender, const Trigger *parameters, int justlos)
 			snd->LastSeen = tar->GetGlobalID();
 			snd->LastMarked = tar->GetGlobalID();
 		}
+		Sender->LastTrigger = tar->GetGlobalID();
 		return 1;
 	}
 	return 0;
@@ -1481,18 +1490,20 @@ inline bool ismysymbol(const char letter)
 //a symbol from idsname
 static int GetIdsValue(const char *&symbol, const char *idsname)
 {
-	int idsfile=core->LoadSymbol(idsname);
-	Holder<SymbolMgr> valHook = core->GetSymbol(idsfile);
-	if (!valHook) {
-		Log(ERROR, "GameScript", "Missing IDS file %s for symbol %s!", idsname, symbol);
-		return -1;
-	}
 	char *newsymbol;
 	int value=strtol(symbol, &newsymbol, 0);
 	if (symbol!=newsymbol) {
 		symbol=newsymbol;
 		return value;
 	}
+
+	int idsfile = core->LoadSymbol(idsname);
+	Holder<SymbolMgr> valHook = core->GetSymbol(idsfile);
+	if (!valHook) {
+		Log(ERROR, "GameScript", "Missing IDS file %s for symbol %s!", idsname, symbol);
+		return -1;
+	}
+
 	char symbolname[64];
 	int x;
 	for (x=0;ismysymbol(*symbol) && x<(int) sizeof(symbolname)-1;x++) {
@@ -1501,6 +1512,35 @@ static int GetIdsValue(const char *&symbol, const char *idsname)
 	}
 	symbolname[x]=0;
 	return valHook->GetValue(symbolname);
+}
+
+static int ParseIntParam(const char *&src, const char *&str)
+{
+	//going to the variable name
+	while (*str != '*' && *str !=',' && *str != ')' ) {
+		str++;
+	}
+	if (*str=='*') { //there may be an IDS table
+		str++;
+		ieResRef idsTabName;
+		char *cur = idsTabName;
+		const char *end = idsTabName + sizeof(ieResRef) - 1;
+		while (*str != ',' && *str != ')') {
+			// limit IDS file length to 8 characters
+			 if (cur != end) {
+				*cur = *str;
+				++cur;
+			}
+			++str;
+		}
+		*cur = 0;
+
+		if (idsTabName[0]) {
+			return GetIdsValue(src, idsTabName);
+		}
+	}
+	//no IDS table
+	return strtol(src, (char **) &src, 0);
 }
 
 static void ParseIdsTarget(const char *&src, Object *&object)
@@ -1569,6 +1609,13 @@ static void ParseObject(const char *&str,const char *&src, Object *&object)
 	}
 }
 
+// some iwd2 dialogs use # instead of " for delimiting parameters (11phaen, 30gobpon, 11oswald)
+// BUT at the same time, some bg2 mod prefixes use it too (eg. Tashia)
+inline bool paramDelimiter(const char *src)
+{
+	return *src == '"' || (*src == '#' && (*(src-1) == '(' || *(src-1) == ',' || *(src+1) == ')'));
+}
+
 /* this function was lifted from GenerateAction, to make it clearer */
 Action* GenerateActionCore(const char *src, const char *str, unsigned short actionID)
 {
@@ -1593,7 +1640,6 @@ Action* GenerateActionCore(const char *src, const char *str, unsigned short acti
 		switch (*str) {
 			default:
 				Log(WARNING, "GSUtils", "Invalid type: %s", str);
-				//str++;
 				delete newAction;
 				return NULL;
 
@@ -1608,31 +1654,7 @@ Action* GenerateActionCore(const char *src, const char *str, unsigned short acti
 
 			case 'i': //Integer
 			{
-				//going to the variable name
-				while (*str != '*' && *str !=',' && *str != ')' ) {
-					str++;
-				}
-				int value;
-				if (*str=='*') { //there may be an IDS table
-					str++;
-					ieVariable idsTabName;
-					char* tmp = idsTabName;
-					while (( *str != ',' ) && ( *str != ')' )) {
-						*tmp = *str;
-						tmp++;
-						str++;
-					}
-					*tmp = 0;
-					if (idsTabName[0]) {
-						value = GetIdsValue(src, idsTabName);
-					}
-					else {
-						value = strtol( src, (char **) &src, 0);
-					}
-				}
-				else { //no IDS table
-					value = strtol( src, (char **) &src, 0);
-				}
+				int value = ParseIntParam(src, str);
 				if (!intCount) {
 					newAction->int0Parameter = value;
 				} else if (intCount == 1) {
@@ -1720,8 +1742,8 @@ Action* GenerateActionCore(const char *src, const char *str, unsigned short acti
 				}
 				//breaking on ',' in case of a monkey attack
 				//fixes bg1:melicamp.dlg, bg1:sharte.dlg, bg2:udvith.dlg
-				//if strings ever need a , inside, this is a FIXME
-				while (*src != '"' && *src !=',') {
+				// NOTE: if strings ever need a , inside, this is will need to change
+				while (*src != ',' && !paramDelimiter(src)) {
 					if (*src == 0) {
 						delete newAction;
 						return NULL;
@@ -1733,7 +1755,7 @@ Action* GenerateActionCore(const char *src, const char *str, unsigned short acti
 					}
 					src++;
 				}
-				if (*src == '"') {
+				if (*src == '"' || *src == '#') {
 					src++;
 				}
 				*dst = 0;
@@ -1841,7 +1863,7 @@ int MoveNearerTo(Scriptable *Sender, const Point &p, int distance, int dont_rele
 
 	if (!actor->InMove() || actor->Destination != p) {
 		bool always_run = core->GetGameControl()->ShouldRun(actor);
-		actor->WalkTo(p, IF_RUNNING * always_run, distance);
+		actor->WalkTo(p, always_run ? IF_RUNNING : 0, distance);
 	}
 
 	if (!actor->InMove()) {
@@ -1966,7 +1988,6 @@ Trigger *GenerateTriggerCore(const char *src, const char *str, int trIndex, int 
 		switch (*str) {
 			default:
 				Log(ERROR, "GSUtils", "Invalid type: %s", str);
-				//str++;
 				delete newTrigger;
 				return NULL;
 
@@ -1981,31 +2002,7 @@ Trigger *GenerateTriggerCore(const char *src, const char *str, int trIndex, int 
 
 			case 'i': //Integer
 			{
-				//going to the variable name
-				while (*str != '*' && *str !=',' && *str != ')' ) {
-					str++;
-				}
-				int value;
-				if (*str=='*') { //there may be an IDS table
-					str++;
-					ieVariable idsTabName;
-					char* tmp = idsTabName;
-					while (( *str != ',' ) && ( *str != ')' )) {
-						*tmp = *str;
-						tmp++;
-						str++;
-					}
-					*tmp = 0;
-					if (idsTabName[0]) {
-						value = GetIdsValue(src, idsTabName);
-					}
-					else {
-						value = strtol( src, (char **) &src, 0);
-					}
-				}
-				else { //no IDS table
-					value = strtol( src, (char **) &src, 0);
-				}
+				int value = ParseIntParam(src, str);
 				if (!intCount) {
 					newTrigger->int0Parameter = value;
 				} else if (intCount == 1) {
@@ -2044,7 +2041,7 @@ Trigger *GenerateTriggerCore(const char *src, const char *str, int trIndex, int 
 				}
 				// some iwd2 dialogs use # instead of " for delimiting parameters (11phaen)
 				// BUT at the same time, some bg2 mod prefixes use it too (eg. Tashia)
-				while (*src != '"' && (*src != '#' || (*(src-1) != '(' && *(src-1) != ',' && *(src+1) != ')'))) {
+				while (!paramDelimiter(src)) {
 					if (*src == 0) {
 						delete newTrigger;
 						return NULL;
@@ -2201,7 +2198,7 @@ ieDword CheckVariable(const Scriptable *Sender, const char *VarName, bool *valid
 		ScriptDebugLog(ID_VARIABLES, "CheckVariable %s: %d", VarName, value);
 		return value;
 	}
-	Game *game = core->GetGame();
+	const Game *game = core->GetGame();
 	if (HasKaputz && !stricmp(newVarName,"KAPUTZ") ) {
 		game->kaputz->Lookup( poi, value );
 		ScriptDebugLog(ID_VARIABLES, "CheckVariable %s: %d", VarName, value);
@@ -2244,7 +2241,7 @@ ieDword CheckVariable(const Scriptable *Sender, const char *VarName, const char 
 		ScriptDebugLog(ID_VARIABLES, "CheckVariable %s%s: %d", Context, VarName, value);
 		return value;
 	}
-	Game *game = core->GetGame();
+	const Game *game = core->GetGame();
 	if (HasKaputz && !stricmp(newVarName,"KAPUTZ") ) {
 		game->kaputz->Lookup( VarName, value );
 		ScriptDebugLog(ID_VARIABLES, "CheckVariable %s%s: %d", Context, VarName, value);
@@ -2273,7 +2270,7 @@ bool VariableExists(Scriptable *Sender, const char *VarName, const char *Context
 	ieDword value = 0;
 	char newVarName[8];
 	strlcpy(newVarName, Context, 7);
-	Game *game = core->GetGame();
+	const Game *game = core->GetGame();
 
 	if (Sender->GetCurrentArea()->locals->Lookup(VarName, value)) {
 		return true;
@@ -2457,11 +2454,11 @@ Point GetEntryPoint(const char *areaname, const char *entryname)
 		return p;
 	}
 	const char *tmpstr = tab->QueryField(areaname, entryname);
-	int x=-1;
-	int y=-1;
-	sscanf(tmpstr, "%d.%d", &x, &y);
-	p.x=(short) x;
-	p.y=(short) y;
+	short x = -1;
+	short y = -1;
+	sscanf(tmpstr, "%hd.%hd", &x, &y);
+	p.x = x;
+	p.y = y;
 	return p;
 }
 

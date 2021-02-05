@@ -84,6 +84,8 @@ class Wall_Polygon;
 #define AT_DUNGEON        0x20
 #define AT_EXTENDED_NIGHT 0x40
 #define AT_CAN_REST_INDOORS 0x80
+//...
+#define AT_PST_DAYNIGHT 0x400
 
 //area animation flags
 #define A_ANI_ACTIVE          1        //if not set, animation is invisible
@@ -388,7 +390,7 @@ public:
 	void AutoLockDoors() const;
 	void UpdateScripts();
 	void ResolveTerrainSound(ieResRef &sound, Point &pos) const;
-	void DoStepForActor(Actor *actor, int walkScale, ieDword time) const;
+	void DoStepForActor(Actor *actor, ieDword time) const;
 	void UpdateEffects();
 	/* removes empty heaps and returns total itemcount */
 	int ConsolidateContainers();
@@ -431,7 +433,7 @@ public:
 	//counts the summons already in the area
 	int CountSummons(ieDword flag, ieDword sex) const;
 	//returns true if an enemy is near P (used in resting/saving)
-	bool AnyEnemyNearPoint(const Point &p);
+	bool AnyEnemyNearPoint(const Point &p) const;
 	unsigned int GetBlockedInRadius(unsigned int px, unsigned int py, unsigned int size, bool stopOnImpassable = true) const;
 	unsigned int GetBlocked(unsigned int x, unsigned int y) const;
 	unsigned int GetBlockedNavmap(unsigned int x, unsigned int y) const;
@@ -442,6 +444,7 @@ public:
 	Actor* GetActorByGlobalID(ieDword objectID) const;
 	Actor* GetActorInRadius(const Point &p, int flags, unsigned int radius) const;
 	std::vector<Actor *> GetAllActorsInRadius(const Point &p, int flags, unsigned int radius, const Scriptable *see = NULL) const;
+	const std::vector<Actor *> &GetAllActors() const { return actors; }
 	Actor *GetActor(const char *Name, int flags) const;
 	Actor* GetActor(int i, bool any) const;
 	Actor* GetActor(const Point &p, int flags, const Movable *checker = NULL) const;
@@ -475,7 +478,7 @@ public:
 	//get the next saved projectile
 	Projectile *GetNextTrap(proIterator &iter) const;
 	//add a projectile to the area
-	void AddProjectile(Projectile* pro, const Point &source, ieWord actorID, bool fake);
+	void AddProjectile(Projectile *pro, const Point &source, ieDword actorID, bool fake);
 	void AddProjectile(Projectile* pro, const Point &source, const Point &dest);
 
 	//returns the duration of a VVC cell set in the area (point may be set to empty)
@@ -550,7 +553,7 @@ public:
 	void AddAmbient(Ambient *ambient) { ambients.push_back(ambient); }
 	void SetupAmbients();
 	Ambient *GetAmbient(int i) const { return ambients[i]; }
-	unsigned int GetAmbientCount(bool toSave=false) const;
+	ieWord GetAmbientCount(bool toSave = false) const;
 
 	//mapnotes
 	void AddMapNote(const Point &point, int color, String* text);

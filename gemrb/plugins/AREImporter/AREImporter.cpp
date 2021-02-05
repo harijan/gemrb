@@ -361,7 +361,7 @@ inline ieDword FixIWD2DoorFlags(ieDword Flags, bool reverse)
 		}
 	}
 	// delayed bad bit removal due to chain overlapping
-	return Flags = (Flags & ~maskOff) | maskOn;
+	return (Flags & ~maskOff) | maskOn;
 }
 
 static Ambient* SetupMainAmbients(Map *map, bool day_or_night) {
@@ -1066,6 +1066,8 @@ Map* AREImporter::GetMap(const char *ResRef, bool day_or_night)
 		//the rest is not read, we seek for every record
 	}
 
+	int pst = core->HasFeature(GF_AUTOMAP_INI);
+
 	core->LoadProgress(75);
 	Log(DEBUG, "AREImporter", "Loading actors");
 	str->Seek( ActorOffset, GEM_STREAM_START );
@@ -1137,6 +1139,13 @@ Map* AREImporter::GetMap(const char *ResRef, bool day_or_night)
 			ab = actmgr->GetActor(0);
 			if(!ab)
 				continue;
+			// PST generally doesn't appear to use the starting MC_ bits, but for some reason
+			// there's a coaxmetal copy in the mortuary with both KEEP and REMOVE corpse
+			// set that should never be seen. The actor is also already dead, so we don't end
+			// up doing any of the regular cleanup on it (it's mrtghost.cre). Banish it instead.
+			if (pst && ab->GetBase(IE_STATE_ID) & STATE_DEAD && ab->GetBase(IE_MC_FLAGS) & MC_REMOVE_CORPSE) {
+				continue;
+			}
 			map->AddActor(ab, false);
 			ab->Pos.x = XPos;
 			ab->Pos.y = YPos;
@@ -1191,8 +1200,6 @@ Map* AREImporter::GetMap(const char *ResRef, bool day_or_night)
 		}
 	}
 
-	int pst = core->HasFeature( GF_AUTOMAP_INI );
-
 	core->LoadProgress(90);
 	Log(DEBUG, "AREImporter", "Loading animations");
 	str->Seek( AnimOffset, GEM_STREAM_START );
@@ -1226,6 +1233,8 @@ Map* AREImporter::GetMap(const char *ResRef, bool day_or_night)
 			anim->startFrameRange = 0; //this will never get resaved (iirc)
 			str->Read( &anim->skipcycle,1 ); //how many cycles are skipped	(100% skippage)
 			str->ReadResRef( anim->PaletteRef );
+			// TODO: EE: word with anim width for PVRZ/WBM resources (if flag bits are set, see A_ANI_ defines)
+			// 0x4a holds the height
 			str->ReadDword( &anim->unknown48 );
 
 			if (pst) {
@@ -1329,13 +1338,13 @@ Map* AREImporter::GetMap(const char *ResRef, bool day_or_night)
 			while (count) {
 				char key[32];
 				int value;
-				sprintf(key, "xPos%d",count);
+				snprintf(key, sizeof(key), "xPos%d",count);
 				value = INInote->GetKeyAsInt(scriptName, key, 0);
 				point.x = value;
-				sprintf(key, "yPos%d",count);
+				snprintf(key, sizeof(key), "yPos%d",count);
 				value = INInote->GetKeyAsInt(scriptName, key, 0);
 				point.y = value;
-				sprintf(key, "text%d",count);
+				snprintf(key, sizeof(key), "text%d",count);
 				value = INInote->GetKeyAsInt(scriptName, key, 0);
 				map->AddMapNote( point, color, value);
 				count--;
@@ -2232,8 +2241,8 @@ int AREImporter::PutAmbients(DataStream *stream, const Map *map)
 	ieWord tmpWord;
 
 	memset(filling,0,sizeof(filling) );
-	unsigned int realCount = map->GetAmbientCount();
-	for (unsigned int i=0; i<realCount; i++) {
+	ieWord realCount = map->GetAmbientCount();
+	for (ieWord i = 0; i < realCount; i++) {
 		const Ambient *am = map->GetAmbient(i);
 		if (am->flags & IE_AMBI_NOSAVE) continue;
 		stream->Write( am->name, 32 );

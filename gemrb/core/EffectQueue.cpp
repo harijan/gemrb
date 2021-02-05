@@ -63,8 +63,8 @@ static EffectRef fx_spell_resistance_ref = { "SpellResistance", -1 };
 static EffectRef fx_protection_from_display_string_ref = { "Protection:String", -1 };
 static EffectRef fx_variable_ref = { "Variable:StoreLocalVariable", -1 };
 
-//immunity effects
-static EffectRef fx_level_immunity_ref = { "Protection:Spelllevel", -1 };
+// immunity effects (setters of IE_IMMUNITY)
+static EffectRef fx_level_immunity_ref = { "Protection:SpellLevel", -1 };
 static EffectRef fx_opcode_immunity_ref = { "Protection:Opcode", -1 }; //bg2
 static EffectRef fx_opcode_immunity2_ref = { "Protection:Opcode2", -1 };//iwd
 static EffectRef fx_spell_immunity_ref = { "Protection:Spell", -1 }; //bg2
@@ -398,7 +398,7 @@ void EffectQueue::ModifyEffectPoint(EffectRef &effect_reference, ieDword x, ieDw
 	ModifyEffectPoint(effect_reference.opcode, x, y);
 }
 
-void EffectQueue::ModifyAllEffectSources(Point &source)
+void EffectQueue::ModifyAllEffectSources(const Point &source)
 {
 	std::list< Effect* >::const_iterator f;
 
@@ -513,13 +513,12 @@ bool EffectQueue::RemoveEffect(const Effect* fx)
 //... but some require reinitialisation
 void EffectQueue::ApplyAllEffects(Actor* target) const
 {
-	std::list< Effect* >::const_iterator f;
-	for ( f = effects.begin(); f != effects.end(); f++ ) {
-		if (Opcodes[(*f)->Opcode].Flags & EFFECT_REINIT_ON_LOAD) {
+	for (auto fx : effects) {
+		if (Opcodes[fx->Opcode].Flags & EFFECT_REINIT_ON_LOAD) {
 			// pretend to be the first application (FirstApply==1)
-			ApplyEffect(target, *f, 1);
+			ApplyEffect(target, fx, 1);
 		} else {
-			ApplyEffect(target, *f, 0);
+			ApplyEffect(target, fx, 0);
 		}
 	}
 }
@@ -864,7 +863,7 @@ static inline int DecreaseEffect(Effect *efx)
 }
 
 //lower decreasing immunities/bounces
-static int check_type(Actor* actor, const Effect* fx)
+static int check_type(const Actor *actor, const Effect *fx)
 {
 	//the protective effect (if any)
 	Effect *efx;
@@ -1325,11 +1324,11 @@ int EffectQueue::ApplyEffect(Actor* target, Effect* fx, ieDword first_apply, ieD
 		res=fn( Owner, target, fx );
 		fx->FirstApply = 0;
 
-		//if there is no owner, we assume it is the target
 		switch( res ) {
 			case FX_APPLIED:
 				//normal effect with duration
 				break;
+			case FX_ABORT:
 			case FX_NOT_APPLIED:
 				//instant effect, pending removal
 				//for example, a damage effect
@@ -1347,8 +1346,6 @@ int EffectQueue::ApplyEffect(Actor* target, Effect* fx, ieDword first_apply, ieD
 				if( fx->TimingMode == FX_DURATION_INSTANT_PERMANENT ) {
 					fx->TimingMode = FX_DURATION_JUST_EXPIRED;
 				}
-				break;
-			case FX_ABORT:
 				break;
 			default:
 				error("EffectQueue", "Unknown effect result '%x', aborting ...\n", res);
@@ -1445,6 +1442,7 @@ void EffectQueue::RemoveAllEffects(const ieResRef Removed) const
 		Log(WARNING, "EffectQueue", "Spell %s has more than one extended header, removing only first!", Removed);
 	}
 	SPLExtHeader *sph = spell->GetExtHeader(0);
+	if (!sph) return; // some iwd2 clabs are only markers
 	for (int i=0; i < sph->FeatureCount; i++) {
 		Effect *origfx = sph->features+i;
 

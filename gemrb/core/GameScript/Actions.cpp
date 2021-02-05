@@ -295,16 +295,16 @@ void GameScript::PermanentStatChange(Scriptable* Sender, Action* parameters)
 	// int2Parameter is supposed to support also bones.ids, but nothing uses it like that
 	// if we need it, take the implementation from GameScript::Damage
 	switch (parameters->int1Parameter) {
-		case 1: // lower
+		case DM_LOWER:
 			value = actor->GetBase(parameters->int0Parameter);
 			value-= parameters->int2Parameter;
 			break;
-		case 2: // raise
+		case DM_RAISE:
 			value = actor->GetBase(parameters->int0Parameter);
 			value+= parameters->int2Parameter;
 			break;
-		case 3:
-		default: // set
+		case DM_SET:
+		default:
 			value = parameters->int2Parameter;
 			break;
 	}
@@ -478,6 +478,7 @@ void GameScript::TriggerActivation(Scriptable* Sender, Action* parameters)
 		trigger->Flags &= ~TRAP_DEACTIVATED;
 		if (trigger->TrapResets()) {
 			trigger->Trapped = 1;
+			Sender->AddTrigger(TriggerEntry(trigger_reset, trigger->GetGlobalID()));
 		}
 	} else {
 		trigger->Flags |= TRAP_DEACTIVATED;
@@ -567,7 +568,7 @@ void GameScript::JumpToObject(Scriptable* Sender, Action* parameters)
 
 void GameScript::TeleportParty(Scriptable* /*Sender*/, Action* parameters)
 {
-	Game *game = core->GetGame();
+	const Game *game = core->GetGame();
 	int i = game->GetPartySize(false);
 	while (i--) {
 		Actor *tar = game->GetPC(i, false);
@@ -636,7 +637,7 @@ void GameScript::ExitPocketPlane(Scriptable* /*Sender*/, Action* /*parameters*/)
 //moves pcs and npcs from an area to another area
 void GameScript::MoveGlobalsTo(Scriptable* /*Sender*/, Action* parameters)
 {
-	Game *game = core->GetGame();
+	const Game *game = core->GetGame();
 	int i = game->GetPartySize(false);
 	while (i--) {
 		Actor *tar = game->GetPC(i, false);
@@ -1707,6 +1708,7 @@ void GameScript::DisplayStringHeadOwner(Scriptable* /*Sender*/, Action* paramete
 	}
 }
 
+// TODO: fix these two actions — they actually take a point, not an object
 void GameScript::FloatMessageFixed(Scriptable* Sender, Action* parameters)
 {
 	Scriptable* target = GetActorFromObject( Sender, parameters->objects[1] );
@@ -2615,7 +2617,7 @@ void GameScript::OpenDoor(Scriptable* Sender, Action* parameters) {
 		}
 	}
 	//if not an actor opens, it don't play sound
-	door->SetDoorOpen(true, (Sender->Type == ST_ACTOR), gid);
+	door->SetDoorOpen(true, (Sender->Type == ST_ACTOR), gid, false);
 	Sender->ReleaseCurrentAction();
 }
 
@@ -3095,7 +3097,7 @@ void GameScript::LeaveParty(Scriptable* Sender, Action* /*parameters*/)
 //HideCreature hides only the visuals of a creature
 //(feet circle and avatar)
 //the scripts of the creature are still running
-//iwd2 stores this flag in the MC field
+//iwd2 stores this flag in the MC field (MC_HIDDEN)
 void GameScript::HideCreature(Scriptable* Sender, Action* parameters)
 {
 	Scriptable* tar = GetActorFromObject( Sender, parameters->objects[1] );
@@ -3260,7 +3262,7 @@ void GameScript::PlayDeadInterruptable(Scriptable* Sender, Action* parameters)
 	actor->CurrentActionState--;
 }
 
-/* this may not be correct, just a placeholder you can fix */
+/* this is not correct, see #92 */
 void GameScript::Swing(Scriptable* Sender, Action* /*parameters*/)
 {
 	if (Sender->Type != ST_ACTOR) {
@@ -3268,10 +3270,10 @@ void GameScript::Swing(Scriptable* Sender, Action* /*parameters*/)
 	}
 	Actor* actor = ( Actor* ) Sender;
 	actor->SetStance( IE_ANI_ATTACK );
-	actor->SetWait( 1 );
+	actor->SetWait(AI_UPDATE_TIME * 2);
 }
 
-/* this may not be correct, just a placeholder you can fix */
+/* this is not correct, see #92 */
 void GameScript::SwingOnce(Scriptable* Sender, Action* /*parameters*/)
 {
 	if (Sender->Type != ST_ACTOR) {
@@ -3279,7 +3281,7 @@ void GameScript::SwingOnce(Scriptable* Sender, Action* /*parameters*/)
 	}
 	Actor* actor = ( Actor* ) Sender;
 	actor->SetStance( IE_ANI_ATTACK );
-	actor->SetWait( 1 );
+	actor->SetWait(AI_UPDATE_TIME);
 }
 
 void GameScript::Recoil(Scriptable* Sender, Action* /*parameters*/)
@@ -3603,7 +3605,7 @@ void GameScript::SetLeavePartyDialogFile(Scriptable* Sender, Action* /*parameter
 
 void GameScript::TextScreen(Scriptable* /*Sender*/, Action* parameters)
 {
-	core->SetPause(PAUSE_ON, 1);
+	core->SetPause(PAUSE_ON, PF_QUIET);
 	strnlwrcpy(core->GetGame()->TextScreen, parameters->string0Parameter, sizeof(ieResRef)-1);
 	core->SetEventFlag(EF_TEXTSCREEN);
 }
@@ -4558,7 +4560,7 @@ void GameScript::PickPockets(Scriptable *Sender, Action* parameters)
 		if (tgt != 255) {
 			skill -= tgt;
 			//if you want original behaviour: remove this
-			skill += core->Roll(1,100, snd->GetStat(IE_LUCK) );
+			skill += snd->LuckyRoll(1, 100, 0);
 		} else {
 			skill = 0;
 		}
@@ -4682,7 +4684,7 @@ void GameScript::TakeItemListPartyNum(Scriptable * Sender, Action* parameters)
 	if (count == 1) {
 		// grant the default table item to the Sender in regular games
 		Action *params = new Action(true);
-		sprintf(params->string0Parameter, "%s", tab->QueryField(9999,9999));
+		snprintf(params->string0Parameter, sizeof(params->string0Parameter), "%s", tab->QueryDefault());
 		CreateItem(Sender, params);
 		delete params;
 	}
@@ -4826,12 +4828,12 @@ void GameScript::Damage(Scriptable* Sender, Action* parameters)
 	int type=MOD_ADDITIVE;
 	// delta.ids
 	switch(parameters->int0Parameter) {
-	case 1: // lower
+	case DM_LOWER: // lower
 		break;
-	case 2: //raise
+	case DM_RAISE: //raise
 		damage=-damage;
 		break;
-	case 3: //set
+	case DM_SET: //set
 		type=MOD_ABSOLUTE;
 		break;
 	case 4: // GemRB extension
@@ -5540,7 +5542,6 @@ void GameScript::RandomWalk(Scriptable* Sender, Action* /*parameters*/)
 	}
 	Actor* actor = ( Actor* ) Sender;
 	actor->RandomWalk( true, false );
-	Sender->ReleaseCurrentAction();
 }
 
 void GameScript::RandomRun(Scriptable* Sender, Action* /*parameters*/)
@@ -5551,7 +5552,6 @@ void GameScript::RandomRun(Scriptable* Sender, Action* /*parameters*/)
 	}
 	Actor* actor = ( Actor* ) Sender;
 	actor->RandomWalk( true, true );
-	Sender->ReleaseCurrentAction();
 }
 
 void GameScript::RandomWalkContinuous(Scriptable* Sender, Action* /*parameters*/)
@@ -5815,16 +5815,25 @@ void GameScript::TurnAMT(Scriptable* Sender, Action* parameters)
 	Sender->ReleaseCurrentAction(); // todo, blocking?
 }
 
-void GameScript::RandomTurn(Scriptable* Sender, Action* /*parameters*/)
+void GameScript::RandomTurn(Scriptable* Sender, Action* parameters)
 {
 	if (Sender->Type!=ST_ACTOR) {
 		Sender->ReleaseCurrentAction();
 		return;
 	}
+	// it doesn't take parameters, but we used them internally for one-shot runs
+	if (parameters->int0Parameter > 1) parameters->int0Parameter--;
+	if (parameters->int0Parameter == 1) {
+		Sender->ReleaseCurrentAction();
+		return;
+	}
 	Actor *actor = (Actor *) Sender;
 	actor->SetOrientation(RAND(0, MAX_ORIENT-1), true);
-	actor->SetWait( 1 );
-	Sender->ReleaseCurrentAction(); // todo, blocking?
+	// the original waited more if the actor was offscreen, perhaps as an optimization
+	int diceSides = 40;
+	Region vp = core->GetVideoDriver()->GetViewport();
+	if (vp.PointInside(actor->Pos)) diceSides = 10;
+	actor->SetWait(AI_UPDATE_TIME * core->Roll(1, diceSides, 0));
 }
 
 void GameScript::AttachTransitionToDoor(Scriptable* Sender, Action* parameters)
@@ -7124,6 +7133,7 @@ void GameScript::SpellHitEffectSprite(Scriptable* Sender, Action* parameters)
 	fx->Parameter2 = parameters->int0Parameter;
 	//height (not sure if this is in the opcode, but seems acceptable)
 	fx->Parameter1 = parameters->int1Parameter;
+	fx->Parameter4 = 1; // mark for special treatment
 	fx->ProbabilityRangeMax = 100;
 	fx->ProbabilityRangeMin = 0;
 	fx->TimingMode=FX_DURATION_INSTANT_PERMANENT_AFTER_BONUSES;
@@ -7152,6 +7162,7 @@ void GameScript::SpellHitEffectPoint(Scriptable* Sender, Action* parameters)
 	fx->Parameter2 = parameters->int0Parameter;
 	//height (not sure if this is in the opcode, but seems acceptable)
 	fx->Parameter1 = parameters->int1Parameter;
+	fx->Parameter4 = 1; // mark for special treatment
 	fx->ProbabilityRangeMax = 100;
 	fx->ProbabilityRangeMin = 0;
 	fx->TimingMode=FX_DURATION_INSTANT_PERMANENT_AFTER_BONUSES;

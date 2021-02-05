@@ -644,7 +644,7 @@ static const ActionLink actionnames[] = {
 	{"explore", GameScript::Explore, 0},
 	{"exploremapchunk", GameScript::ExploreMapChunk, 0},
 	{"exportparty", GameScript::ExportParty, 0},
-	{"face", GameScript::Face,AF_BLOCKING},
+	{"face", GameScript::Face, AF_BLOCKING|AF_ALIVE},
 	{"faceobject", GameScript::FaceObject, AF_BLOCKING},
 	{"facesavedlocation", GameScript::FaceSavedLocation, AF_BLOCKING},
 	{"fadefromblack", GameScript::FadeFromColor, AF_BLOCKING}, //probably the same
@@ -824,7 +824,9 @@ static const ActionLink actionnames[] = {
 	{"randomrun", GameScript::RandomRun, AF_BLOCKING|AF_ALIVE},
 	{"randomturn", GameScript::RandomTurn, AF_BLOCKING},
 	{"randomwalk", GameScript::RandomWalk, AF_BLOCKING|AF_ALIVE},
+	{"randomwalktime", GameScript::RandomWalk, AF_BLOCKING|AF_ALIVE},
 	{"randomwalkcontinuous", GameScript::RandomWalkContinuous, AF_BLOCKING|AF_ALIVE},
+	{"randomwalkcontinuoustime", GameScript::RandomWalkContinuous, AF_BLOCKING|AF_ALIVE},
 	{"realsetglobaltimer", GameScript::RealSetGlobalTimer,AF_MERGESTRINGS},
 	{"reallyforcespell", GameScript::ReallyForceSpell, AF_BLOCKING|AF_ALIVE},
 	{"reallyforcespellres", GameScript::ReallyForceSpell, AF_BLOCKING|AF_ALIVE},
@@ -955,7 +957,7 @@ static const ActionLink actionnames[] = {
 	{"shout", GameScript::Shout, 0},
 	{"sinisterpoof", GameScript::CreateVisualEffect, 0},
 	{"smallwait", GameScript::SmallWait,AF_BLOCKING},
-	{"smallwaitrandom", GameScript::SmallWaitRandom,AF_BLOCKING},
+	{"smallwaitrandom", GameScript::SmallWaitRandom, AF_BLOCKING|AF_ALIVE},
 	{"soundactivate", GameScript::SoundActivate, 0},
 	{"spawnptactivate", GameScript::SpawnPtActivate, 0},
 	{"spawnptdeactivate", GameScript::SpawnPtDeactivate, 0},
@@ -1042,7 +1044,7 @@ static const ActionLink actionnames[] = {
 	{"verbalconstanthead", GameScript::VerbalConstantHead, 0},
 	{"wait", GameScript::Wait, AF_BLOCKING},
 	{"waitanimation", GameScript::WaitAnimation,AF_BLOCKING},//iwd2
-	{"waitrandom", GameScript::WaitRandom, AF_BLOCKING},
+	{"waitrandom", GameScript::WaitRandom, AF_BLOCKING|AF_ALIVE},
 	{"weather", GameScript::Weather, 0},
 	{"xequipitem", GameScript::XEquipItem, 0},
 	{ NULL,NULL, 0}
@@ -2311,19 +2313,17 @@ int GameScript::EvaluateString(Scriptable* Sender, char* String)
 	return 0;
 }
 
-bool Condition::Evaluate(Scriptable* Sender)
+bool Condition::Evaluate(Scriptable *Sender) const
 {
 	int ORcount = 0;
 	unsigned int result = 0;
 	bool subresult = true;
 
 	if (triggers.empty()) {
-		Log(ERROR, "GameScript", "Trigger block without triggers encountered!");
-		return false;
+		return true;
 	}
 
-	for (size_t i = 0; i < triggers.size(); i++) {
-		Trigger* tR = triggers[i];
+	for (const Trigger *tR : triggers) {
 		//do not evaluate triggers in an Or() block if one of them
 		//was already True() ... but this sane approach was only used in iwd2!
 		if (!core->HasFeature(GF_EFFICIENT_OR) || !ORcount || !subresult) {
@@ -2383,6 +2383,8 @@ int Trigger::Evaluate(Scriptable *Sender) const
 	if (flags & TF_NEGATE) {
 		return !ret;
 	}
+	// ideally we'd set LastTrigger here, but we need the resolved target object
+
 	return ret;
 }
 
@@ -2595,7 +2597,6 @@ Action* GenerateAction(const char* String)
 	action = GenerateActionCore( src, str, actionID);
 	if (!action) {
 		Log(ERROR, "GameScript", "Malformed scripting action: %s", String);
-		goto done;
 	}
 	done:
 	free(actionString);
@@ -2641,7 +2642,7 @@ void Object::dump(StringBuffer& buffer) const
 }
 
 /** Return true if object is null */
-bool Object::isNull()
+bool Object::isNull() const
 {
 	if (objectName[0]!=0) {
 		return false;

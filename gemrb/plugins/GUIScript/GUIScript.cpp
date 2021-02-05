@@ -266,7 +266,7 @@ static int SetFunctionTooltip(int WindowIndex, int ControlIndex, char *txt, int 
 			int ret;
 			if (ShowHotkeys) {
 				char *txt2 = (char *) malloc(strlen(txt) + 10);
-				sprintf(txt2, "F%d - %s", Function, txt);
+				snprintf(txt2, strlen(txt) + 10, "F%d - %s", Function, txt);
 				ret = core->SetTooltip((ieWord) WindowIndex, (ieWord) ControlIndex, txt2, Function);
 				free(txt2);
 			} else {
@@ -5510,7 +5510,10 @@ static PyObject* GemRB_Control_SetAnimation(PyObject * /*self*/, PyObject* args)
 	}
 
 	ControlAnimation* anim = new ControlAnimation( ctl, ResRef, Cycle );
-	if (!anim->HasControl()) Py_RETURN_NONE;
+	if (!anim->HasControl()) {
+		delete anim;
+		Py_RETURN_NONE;
+	}
 
 	if (Blend) {
 		anim->SetBlend(true);
@@ -7713,6 +7716,7 @@ static PyObject* GemRB_GetSlotType(PyObject * /*self*/, PyObject* args)
 	PyDict_SetItemString(dict, "Type", PyLong_FromLong((int)core->QuerySlotType(tmp)));
 	PyDict_SetItemString(dict, "ID", PyLong_FromLong((int)core->QuerySlotID(tmp)));
 	PyDict_SetItemString(dict, "Tip", PyLong_FromLong((int)core->QuerySlottip(tmp)));
+	PyDict_SetItemString(dict, "Flags", PyInt_FromLong((int)core->QuerySlotFlags(tmp)));
 	//see if the actor shouldn't have some slots displayed
 	if (!actor || !actor->PCStats) {
 		goto has_slot;
@@ -8549,6 +8553,18 @@ static PyObject* GemRB_Button_SetSpellIcon(PyObject * /*self*/, PyObject* args)
 	return ret;
 }
 
+static Sprite2D* GetAnySprite(const char *resRef, int cycle, int frame, bool silent = true)
+{
+	Sprite2D *img = gamedata->GetBAMSprite(resRef, cycle, frame, silent);
+	if (img) return img;
+
+	// try static image formats to support PNG
+	ResourceHolder<ImageMgr> im = GetResourceHolder<ImageMgr>(resRef);
+	if (im) {
+		img = im->GetSprite2D();
+	}
+	return img;
+}
 
 static Sprite2D* GetUsedWeaponIcon(Item *item, int which)
 {
@@ -8557,9 +8573,9 @@ static Sprite2D* GetUsedWeaponIcon(Item *item, int which)
 		ieh = item->GetWeaponHeader(true);
 	}
 	if (ieh) {
-		return gamedata->GetBAMSprite(ieh->UseIcon, -1, which, true);
+		return GetAnySprite(ieh->UseIcon, -1, which);
 	}
-	return gamedata->GetBAMSprite(item->ItemIcon, -1, which, true);
+	return GetAnySprite(item->ItemIcon, -1, which);
 }
 
 static void SetItemText(Button* btn, int charges, bool oneisnone)
@@ -8630,12 +8646,12 @@ static PyObject *SetItemIcon(int wi, int ci, const char *ItemResRef, int Which, 
 	int i;
 	switch (Which) {
 	case 0: case 1:
-		Picture = gamedata->GetBAMSprite(item->ItemIcon, -1, Which, true);
+		Picture = GetAnySprite(item->ItemIcon, -1, Which);
 		break;
 	case 2:
 		btn->SetPicture( NULL ); // also calls ClearPictureList
 		for (i=0;i<4;i++) {
-			Picture = gamedata->GetBAMSprite(item->DescriptionIcon, -1, i, true);
+			Picture = GetAnySprite(item->DescriptionIcon, -1, i);
 			if (Picture)
 				btn->StackPicture(Picture);
 		}
@@ -8651,7 +8667,7 @@ static PyObject *SetItemIcon(int wi, int ci, const char *ItemResRef, int Which, 
 			Item* item2 = gamedata->GetItem(Item2ResRef, true);
 			if (item2) {
 				Sprite2D* Picture2;
-				Picture2 = gamedata->GetBAMSprite(item2->ItemIcon, -1, Which-4, true);
+				Picture2 = GetAnySprite(item2->ItemIcon, -1, Which - 4);
 				if (Picture2) btn->StackPicture(Picture2);
 				gamedata->FreeItem( item2, Item2ResRef, false );
 			}
@@ -8662,7 +8678,7 @@ static PyObject *SetItemIcon(int wi, int ci, const char *ItemResRef, int Which, 
 	default:
 		ITMExtHeader *eh = item->GetExtHeader(Which-6);
 		if (eh) {
-			Picture = gamedata->GetBAMSprite(eh->UseIcon, -1, 0, true);
+			Picture = GetAnySprite(eh->UseIcon, -1, 0);
 		}
 		else {
 			Picture = NULL;
@@ -11188,8 +11204,7 @@ static PyObject* GemRB_FindItem(PyObject * /*self*/, PyObject* args)
 	GET_GAME();
 	GET_ACTOR_GLOBAL();
 
-	int slot = -1;
-	slot = actor->inventory.FindItem(ItemName, IE_INV_ITEM_UNDROPPABLE);
+	int slot = actor->inventory.FindItem(ItemName, IE_INV_ITEM_UNDROPPABLE);
 	return PyLong_FromLong(slot);
 }
 
@@ -11249,7 +11264,7 @@ static PyObject* GemRB_GetItem(PyObject * /*self*/, PyObject* args)
 		return AttributeError( GemRB_GetItem__doc );
 	}
 	//it isn't a problem if actor not found
-	Game *game = core->GetGame();
+	const Game *game = core->GetGame();
 	if (game) {
 		if (!PartyID) {
 			PartyID = game->GetSelectedPCSingle();
@@ -11453,7 +11468,6 @@ static CREItem *TryToUnequip(Actor *actor, unsigned int Slot, unsigned int Count
 			return NULL;
 		}
 	}
-	///fixme: make difference between cursed/unmovable
 	if (! actor->inventory.UnEquipItem( Slot, false )) {
 		// Item is currently undroppable/cursed
 		if (si->Flags&IE_INV_ITEM_CURSED) {
@@ -12635,7 +12649,7 @@ static PyObject* GemRB_GetAbilityBonus(PyObject * /*self*/, PyObject* args)
 
 	GET_GAME();
 
-	Actor *actor = game->FindPC(game->GetSelectedPCSingle());
+	const Actor *actor = game->FindPC(game->GetSelectedPCSingle());
 	if (!actor) {
 		return RuntimeError( "Actor not found!\n" );
 	}
@@ -15978,6 +15992,12 @@ bool GUIScript::Init(void)
 {
 	PyImport_AppendInittab("GemRB", &PyInit_GemRB);
 	PyImport_AppendInittab("_GemRB", &PyInit_GemRB_Internal);
+#ifdef VITA
+	//Py_Initialize crashes on Vita otherwise
+	Py_NoSiteFlag = 1;
+	Py_IgnoreEnvironmentFlag = 1;
+	Py_NoUserSiteDirectory = 1;
+#endif
 
 	Py_Initialize();
 	if (!Py_IsInitialized()) {
@@ -16006,7 +16026,7 @@ bool GUIScript::Init(void)
 	char path2[_MAX_PATH];
 	char quoted[_MAX_PATH];
 
-	PathJoin(path, core->GUIScriptsPath, "GUIScripts", NULL);
+	PathJoin(path, core->GUIScriptsPath, "GUIScripts", nullptr);
 
 	// Add generic script path early, so GameType detection works
 	sprintf( string, "sys.path.append(\"%s\")", QuotePath( quoted, path ));
@@ -16031,9 +16051,9 @@ bool GUIScript::Init(void)
 
 	// use the iwd guiscripts for how, but leave its override
 	if (stricmp( core->GameType, "how" ) == 0) {
-		PathJoin(path2, path, "iwd", NULL);
+		PathJoin(path2, path, "iwd", nullptr);
 	} else {
-		PathJoin(path2, path, core->GameType, NULL);
+		PathJoin(path2, path, core->GameType, nullptr);
 	}
 
 	// GameType-specific import path must have a higher priority than
@@ -16074,7 +16094,7 @@ bool GUIScript::Init(void)
 	// TODO: Put this file somewhere user editable
 	// TODO: Search multiple places for this file
 	char include[_MAX_PATH];
-	PathJoin(include, core->GUIScriptsPath, "GUIScripts/include.py", NULL);
+	PathJoin(include, core->GUIScriptsPath, "GUIScripts/include.py", nullptr);
 	ExecFile(include);
 
 	PyObject *pClassesMod = PyImport_AddModule( "GUIClasses" );
@@ -16090,7 +16110,7 @@ bool GUIScript::Autodetect(void)
 	Log(MESSAGE, "GUIScript", "Detecting GameType.");
 
 	char path[_MAX_PATH];
-	PathJoin( path, core->GUIScriptsPath, "GUIScripts", NULL );
+	PathJoin(path, core->GUIScriptsPath, "GUIScripts", nullptr);
 	DirectoryIterator iter( path );
 	if (!iter)
 		return false;
@@ -16106,7 +16126,7 @@ bool GUIScript::Autodetect(void)
 		if (iter.IsDirectory() && dirent[0] != '.') {
 			// NOTE: these methods subtly differ in sys.path content, need for __init__.py files ...
 			// Method1:
-			PathJoin(module, core->GUIScriptsPath, "GUIScripts", dirent, "Autodetect.py", NULL);
+			PathJoin(module, core->GUIScriptsPath, "GUIScripts", dirent, "Autodetect.py", nullptr);
 			ExecFile(module);
 			// Method2:
 			//strcpy( module, dirent );

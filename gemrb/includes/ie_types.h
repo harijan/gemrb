@@ -34,15 +34,13 @@
 
 namespace GemRB {
 
-//we need this for Windows and Android
-#if defined (WIN32) || defined (ANDROID)
+// we need this fallback for Android and anyone else skipping
+// cmake, where the proper sizes are checked for
+#ifndef SIZEOF_INT
 #define SIZEOF_INT 4
-#define SIZEOF_LONG_INT 4
 #endif
-
-//well msvc and Android likes __int64, and me too
-#ifndef WIN32
-#define __int64 long long
+#ifndef SIZEOF_LONG_INT
+#define SIZEOF_LONG_INT 4
 #endif
 
 typedef unsigned char ieByte;

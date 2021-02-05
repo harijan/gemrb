@@ -30,6 +30,13 @@ ENDIF(DEFINED CMAKE_BUILD_TYPE)
 
 PROJECT(gemrb)
 
+find_program(SCCACHE_PROGRAM "sccache")
+if(SCCACHE_PROGRAM)
+	message(STATUS "Using sccache found at ${SCCACHE_PROGRAM} for caching build results")
+	set(CMAKE_C_COMPILER_LAUNCHER "${SCCACHE_PROGRAM}" CACHE STRING "" FORCE)
+	set(CMAKE_CXX_COMPILER_LAUNCHER "${SCCACHE_PROGRAM}" CACHE STRING "" FORCE)
+endif()
+
 # check for RaspberryPi
 IF(UNIX)
 	SET(RPI_GLES_PATH "/opt/vc")
@@ -504,6 +511,10 @@ IF(APPLE)
 	# for pure objective-c
 	SET (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -x objective-c -DTARGET_OS_MAC")
 ENDIF(APPLE)
+
+IF(VITA)
+	INCLUDE(platforms/vita/vita.cmake)
+ENDIF(VITA)
 
 #Plugin addition macro
 MACRO(ADD_GEMRB_PLUGIN plugin_name)

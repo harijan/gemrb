@@ -59,6 +59,7 @@ static int SLOT_ARMOR = -1;
 //IWD2 style slots
 static bool IWD2 = false;
 
+[[noreturn]]
 static void InvalidSlot(int slot)
 {
 	error("Inventory", "Invalid slot: %d!\n", slot);
@@ -145,7 +146,6 @@ CREItem *Inventory::GetItem(unsigned int slot)
 {
 	if (slot >= Slots.size() ) {
 		InvalidSlot(slot);
-		return NULL;
 	}
 	CREItem *item = Slots[slot];
 	Slots.erase(Slots.begin()+slot);
@@ -495,7 +495,6 @@ CREItem *Inventory::RemoveItem(unsigned int slot, unsigned int count)
 
 	if (slot >= Slots.size() ) {
 		InvalidSlot(slot);
-		return NULL;
 	}
 	item = Slots[slot];
 
@@ -550,7 +549,6 @@ void Inventory::SetSlotItem(CREItem* item, unsigned int slot)
 {
 	if (slot >= Slots.size() ) {
 		InvalidSlot(slot);
-		return;
 	}
 
 	delete Slots[slot];
@@ -570,7 +568,6 @@ int Inventory::AddSlotItem(CREItem* item, int slot, int slottype, bool ranged)
 	if (slot >= 0) {
 		if ((unsigned)slot >= Slots.size()) {
 			InvalidSlot(slot);
-			return ASI_FAILED;
 		}
 
 		//check for equipping weapons
@@ -799,7 +796,7 @@ bool Inventory::DropItemAtLocation(const char *resref, unsigned int flags, Map *
 		if (!item) {
 			continue;
 		}
-		//if you want to drop undoppable items, simply set IE_INV_UNDROPPABLE
+		//if you want to drop undroppable items, simply set IE_INV_UNDROPPABLE
 		//by default, it won't drop them
 		if ( ((flags^IE_INV_ITEM_UNDROPPABLE)&item->Flags)!=flags) {
 				continue;
@@ -822,16 +819,13 @@ bool Inventory::DropItemAtLocation(const char *resref, unsigned int flags, Map *
 		if (!Owner->GetBase(IE_GOLD)) {
 			return dropped;
 		}
-		CREItem *gold = new CREItem();
-	
-		gold->Expired = 0;
-		gold->Flags = 0;
-		gold->Usages[1] = 0;
-		gold->Usages[2] = 0;
-		CopyResRef(gold->ItemResRef, core->GoldResRef);
-		gold->Usages[0] = Owner->BaseStats[IE_GOLD];
 		Owner->BaseStats[IE_GOLD] = 0;
-		map->AddItemToLocation(loc, gold);
+		CREItem *gold = new CREItem();
+		if (CreateItemCore(gold, core->GoldResRef, static_cast<int>(Owner->BaseStats[IE_GOLD]), 0, 0)) {
+			map->AddItemToLocation(loc, gold);
+		} else {
+			delete gold;
+		}
 	}
 	return dropped;
 }
@@ -840,7 +834,6 @@ CREItem *Inventory::GetSlotItem(ieDword slot) const
 {
 	if (slot >= Slots.size() ) {
 		InvalidSlot(slot);
-		return NULL;
 	}
 	return Slots[slot];
 }
@@ -960,9 +953,6 @@ bool Inventory::EquipItem(ieDword slot)
 	}
 	gamedata->FreeItem(itm, item->ItemResRef, false);
 	if (effect) {
-		if (item->Flags & IE_INV_ITEM_CURSED) {
-			item->Flags|=IE_INV_ITEM_UNDROPPABLE;
-		}
 		AddSlotEffects( slot );
 	}
 	return true;
@@ -970,24 +960,18 @@ bool Inventory::EquipItem(ieDword slot)
 
 //the removecurse flag will check if it is possible to move the item to the inventory
 //after a remove curse spell
-bool Inventory::UnEquipItem(ieDword slot, bool removecurse)
+bool Inventory::UnEquipItem(ieDword slot, bool removecurse) const
 {
 	CREItem *item = GetSlotItem(slot);
 	if (!item) {
 		return false;
 	}
-	if (removecurse) {
-		if (item->Flags & IE_INV_ITEM_MOVABLE) {
-			item->Flags&=~IE_INV_ITEM_UNDROPPABLE;
-		}
-		if (FindCandidateSlot(SLOT_INVENTORY,0,item->ItemResRef)<0) {
-			return false;
-		}
+	if (item->Flags & IE_INV_ITEM_UNDROPPABLE && !core->HasFeature(GF_NO_DROP_CAN_MOVE)) {
+		return false;
 	}
-	if (!core->HasFeature(GF_NO_DROP_CAN_MOVE) || (item->Flags&IE_INV_ITEM_CURSED) ) {
-		if (item->Flags & IE_INV_ITEM_UNDROPPABLE ) {
-			return false;
-		}
+
+	if (!removecurse && item->Flags & IE_INV_ITEM_CURSED && core->QuerySlotEffects(slot)) {
+		return false;
 	}
 	item->Flags &= ~IE_INV_ITEM_EQUIPPED; //no idea if this is needed, won't hurt
 	return true;
@@ -1253,9 +1237,6 @@ bool Inventory::SetEquippedSlot(ieWordSigned slotcode, ieWord header, bool noFX)
 	if (effects) {
 		CREItem* item = GetSlotItem(newslot);
 		item->Flags|=IE_INV_ITEM_EQUIPPED;
-		if (item->Flags & IE_INV_ITEM_CURSED) {
-			item->Flags|=IE_INV_ITEM_UNDROPPABLE;
-		}
 		if (!noFX) {
 			AddSlotEffects(newslot);
 
@@ -1355,7 +1336,7 @@ CREItem *Inventory::GetUsedWeapon(bool leftorright, int &slot) const
 // Returns index of first empty slot or slot with the same
 // item and not full stack. On fail returns -1
 // Can be used to check for full inventory
-int Inventory::FindCandidateSlot(int slottype, size_t first_slot, const char *resref)
+int Inventory::FindCandidateSlot(int slottype, size_t first_slot, const char *resref) const
 {
 	if (first_slot >= Slots.size())
 		return -1;
@@ -1615,6 +1596,7 @@ bool Inventory::GetEquipmentInfo(ItemExtHeader *array, int startindex, int count
 					break;
 				case ID_NEED:
 					if (!idreq1) continue;
+					break;
 				default:;
 			}
 
@@ -1672,7 +1654,7 @@ ieDword Inventory::GetEquipExclusion(int index) const
 void Inventory::UpdateShieldAnimation(Item *it)
 {
 	char AnimationType[2]={0,0};
-	int WeaponType = -1;
+	int WeaponType;
 
 	if (it) {
 		memcpy(AnimationType, it->AnimationType, 2);

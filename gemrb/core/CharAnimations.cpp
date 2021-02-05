@@ -952,31 +952,23 @@ Animation** CharAnimations::GetAnimation(unsigned char Stance, unsigned char Ori
 			return NULL;
 
 		case IE_ANI_PST_STAND:
-			StanceID=IE_ANI_AWAKE;
+			StanceID = IE_ANI_AWAKE;
 			break;
 		case IE_ANI_PST_GHOST:
-			StanceID=IE_ANI_AWAKE;
-			Orient=0;
+			StanceID = IE_ANI_AWAKE;
+			Orient = 0;
 			break;
 		case IE_ANI_PST_ANIMATION_3: //stc->std
-			if (StanceID==IE_ANI_READY) {
-				StanceID=IE_ANI_AWAKE;
+			if (StanceID == IE_ANI_READY) {
+				StanceID = IE_ANI_AWAKE;
 			}
 			break;
 		case IE_ANI_PST_ANIMATION_2: //std->stc
-			if (StanceID==IE_ANI_AWAKE) {
-				StanceID=IE_ANI_READY;
+			if (StanceID == IE_ANI_AWAKE) {
+				StanceID = IE_ANI_READY;
 			}
 			break;
 	}
-	//pst animations don't have separate animation for sleep/die
-	if (AnimType >= IE_ANI_PST_ANIMATION_1) {
-		if (StanceID==IE_ANI_DIE) {
-			StanceID=IE_ANI_TWITCH;
-		}
-	}
-
-	StanceID = MaybeOverrideStance(StanceID);
 
 	//TODO: Implement Auto Resource Loading
 	//setting up the sequencing of animation cycles
@@ -987,12 +979,6 @@ Animation** CharAnimations::GetAnimation(unsigned char Stance, unsigned char Ori
 			autoSwitchOnEnd = true;
 			break;
 		case IE_ANI_SLEEP: //going to sleep
-			nextStanceID = IE_ANI_TWITCH;
-			autoSwitchOnEnd = true;
-			break;
-		case IE_ANI_TWITCH: //dead, sleeping
-			autoSwitchOnEnd = false;
-			break;
 		case IE_ANI_DIE: //going to die
 			nextStanceID = IE_ANI_TWITCH;
 			autoSwitchOnEnd = true;
@@ -1001,8 +987,8 @@ Animation** CharAnimations::GetAnimation(unsigned char Stance, unsigned char Ori
 		case IE_ANI_RUN:
 		case IE_ANI_CAST: // looping
 		case IE_ANI_READY:
-			break;
 		case IE_ANI_AWAKE:
+		case IE_ANI_TWITCH: //dead, sleeping
 			break;
 		case IE_ANI_EMERGE:
 		case IE_ANI_GET_UP:
@@ -1024,11 +1010,25 @@ Animation** CharAnimations::GetAnimation(unsigned char Stance, unsigned char Ori
 			Log(MESSAGE, "CharAnimation", "Invalid Stance: %d", StanceID);
 			break;
 	}
-	Animation** anims = Anims[StanceID][Orient];
 
+	StanceID = MaybeOverrideStance(StanceID);
+
+	bool lastFrameOnly = false;
+	//pst (and some other) animations don't have separate animations for sleep/die
+	if (Stance == IE_ANI_TWITCH &&
+		(AnimType >= IE_ANI_PST_ANIMATION_1 || MaybeOverrideStance(IE_ANI_DIE) == StanceID))
+	{
+		lastFrameOnly = true;
+	}
+
+	Animation** anims = Anims[StanceID][Orient];
 	if (anims) {
 		MaybeUpdateMainPalette(anims);
 		previousStanceID = StanceID;
+
+		if (lastFrameOnly) {
+			anims[0]->SetPos(anims[0]->GetFrameCount() - 1);
+		}
 
 		return anims;
 	}
@@ -1161,7 +1161,11 @@ Animation** CharAnimations::GetAnimation(unsigned char Stance, unsigned char Ori
 
 		//animation is affected by game flags
 		a->gameAnimation = true;
-		a->SetPos( 0 );
+		if (lastFrameOnly) {
+			a->SetPos(a->GetFrameCount() - 1);
+		} else {
+			a->SetPos(0);
+		}
 
 		//setting up the sequencing of animation cycles
 		switch (StanceID) {
@@ -1185,7 +1189,7 @@ Animation** CharAnimations::GetAnimation(unsigned char Stance, unsigned char Ori
 				a->Flags |= A_ANI_PLAYONCE;
 				break;
 		}
-		switch (GetAnimType()) {
+		switch (AnimType) {
 			case IE_ANI_NINE_FRAMES: //dragon animations
 			case IE_ANI_FOUR_FRAMES: //wyvern animations
 			case IE_ANI_FOUR_FRAMES_2:
@@ -1213,7 +1217,7 @@ Animation** CharAnimations::GetAnimation(unsigned char Stance, unsigned char Ori
 
 	}
 
-	switch (GetAnimType()) {
+	switch (AnimType) {
 		case IE_ANI_NINE_FRAMES: //dragon animations
 		case IE_ANI_FOUR_FRAMES: //wyvern animations
 		case IE_ANI_FOUR_FRAMES_2:
@@ -1224,6 +1228,7 @@ Animation** CharAnimations::GetAnimation(unsigned char Stance, unsigned char Ori
 		case IE_ANI_TWO_FILES_5: // 9 orientations
 		case IE_ANI_CODE_MIRROR_2: //9 orientations
 		case IE_ANI_CODE_MIRROR_3:
+		case IE_ANI_PST_GHOST:
 			Anims[StanceID][Orient] = anims;
 			break;
 		case IE_ANI_TWO_FILES:
@@ -1237,6 +1242,7 @@ Animation** CharAnimations::GetAnimation(unsigned char Stance, unsigned char Ori
 		case IE_ANI_SIX_FILES_2:
 		case IE_ANI_TWO_PIECE:
 		case IE_ANI_FRAGMENT:
+		case IE_ANI_PST_STAND:
 			Orient&=~1;
 			Anims[StanceID][Orient] = anims;
 			Anims[StanceID][Orient + 1] = anims;
@@ -1251,12 +1257,12 @@ Animation** CharAnimations::GetAnimation(unsigned char Stance, unsigned char Ori
 				Anims[StanceID][Orient] = anims;
 			}
 			break;
-		case IE_ANI_TWO_FILES_4: {
+		case IE_ANI_TWO_FILES_4:
 			for (int i = 0; i < MAX_ANIMS; ++i) {
 				for (int j = 0; j < MAX_ORIENT; ++j) {
 					Anims[i][j] = anims;
 				}
-			}}
+			}
 			break; 
 
 		case IE_ANI_PST_ANIMATION_3: //no stc just std
@@ -1274,17 +1280,6 @@ Animation** CharAnimations::GetAnimation(unsigned char Stance, unsigned char Ori
 					Anims[StanceID][Orient + 1] = anims;
 					break;
 			}
-			break;
-
-		case IE_ANI_PST_STAND:
-			Orient &=~1;
-			Anims[StanceID][Orient] = anims;
-			Anims[StanceID][Orient+1] = anims;
-			break;
-		case IE_ANI_PST_GHOST:
-			Orient = 0;
-			StanceID = IE_ANI_AWAKE;
-			Anims[StanceID][0] = anims;
 			break;
 		default:
 			error("CharAnimations", "Unknown animation type\n");
@@ -2557,13 +2552,13 @@ void CharAnimations::AddLRSuffix( char* ResRef, unsigned char StanceID,
 			strcpy( EquipData->Suffix, "g1" );
 			Cycle = Orient / 2;
 			break;
-		case IE_ANI_READY:
+		case IE_ANI_AWAKE:
 			strcat( ResRef, "g1" );
 			strcpy( EquipData->Suffix, "g1" );
 			Cycle = 8 + Orient / 2;
 			break;
+		case IE_ANI_READY:
 		case IE_ANI_HEAD_TURN: //could be wrong
-		case IE_ANI_AWAKE:
 			strcat( ResRef, "g1" );
 			strcpy( EquipData->Suffix, "g1" );
 			Cycle = 16 + Orient / 2;
