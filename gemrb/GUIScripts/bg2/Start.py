@@ -139,7 +139,7 @@ def MigrateSaveDir():
 	if len(saves) == 0:
 		return
 
-	print "Migrating saves from old location ...",
+	print("Migrating saves from old location ...")
 	if not os.path.isdir (saveDir):
 		os.mkdir (saveDir)
 
@@ -150,4 +150,4 @@ def MigrateSaveDir():
 			newSave = os.path.join (saveDir, save + "- moved from ToB")
 		os.rename (os.path.join (mpSaveDir, save), newSave)
 
-	print "done."
+	print("done.")
