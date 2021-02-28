@@ -2489,7 +2489,7 @@ static void InitActorTables()
 
 		int tmp = 0;
 		for (i=0; i<wspattack_rows; i++) {
-			wspattack[i] = (int *) calloc(wspattack_cols, sizeof(int));
+			wspattack[i] = (int *) calloc((unsigned int)wspattack_cols, sizeof(int));
 			for (int j=0; j<wspattack_cols; j++) {
 				tmp = atoi(tm->QueryField(i, j));
 				//negative values relate to x/2, so we adjust them
