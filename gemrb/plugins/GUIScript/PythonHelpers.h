@@ -71,8 +71,8 @@ public:
 		if (Holder<T>::ptr) {
 			Holder<T>::ptr->acquire();
 			GUIScript *gs = (GUIScript *) core->GetGUIScriptEngine();
-			PyObject *obj = PyCapsule_New(Holder<T>::ptr, "CObject.ptr", PyCapsuleRelease);
-			PyCapsule_SetContext(obj, const_cast<TypeID*>(&T::ID));
+			PyObject *obj = PyCapsule_New(Holder<T>::ptr, name, PyCapsuleRelease);
+			PyCapsule_SetContext(obj, &T::ID);
 			//PyObject *obj = PyCapsule_FromVoidPtrAndDesc(,,);
 			PyObject *tuple = PyTuple_New(1);
 			PyTuple_SET_ITEM(tuple, 0, obj);
@@ -114,6 +114,10 @@ public:
 private:
 	static void PyCapsuleRelease(PyObject *obj)
 	{
+		if (!PyCapsule_IsValid(obj, &T::ID)) {
+			Log(ERROR, "GUIScript", "Bad CObject deleted.");
+			return;
+		}
 		reinterpret_cast<T*>(obj)->release();
 	}
 	static void PyRelease(void *obj, void *desc)

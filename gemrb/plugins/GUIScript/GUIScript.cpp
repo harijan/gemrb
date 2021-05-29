@@ -16005,17 +16005,17 @@ bool GUIScript::Init(void)
 	/* pMainDic is a borrowed reference */
 
 
-	char string[_MAX_PATH+200];
+	char buffer[_MAX_PATH+200];
 
-	sprintf( string, "import sys" );
-	if (PyRun_SimpleString( string ) == -1) {
-		Log(ERROR, "GUIScript", "Error running: %s", string);
+	sprintf( buffer, "import sys" );
+	if (PyRun_SimpleString( buffer ) == -1) {
+		Log(ERROR, "GUIScript", "Error running: %s", buffer);
 		return false;
 	}
 
 	// 2.6+ only, so we ignore failures
-	sprintf( string, "sys.dont_write_bytecode = True");
-	PyRun_SimpleString( string );
+	sprintf( buffer, "sys.dont_write_bytecode = True");
+	PyRun_SimpleString( buffer );
 
 	char path[_MAX_PATH];
 	char path2[_MAX_PATH];
@@ -16024,20 +16024,20 @@ bool GUIScript::Init(void)
 	PathJoin(path, core->GUIScriptsPath, "GUIScripts", nullptr);
 
 	// Add generic script path early, so GameType detection works
-	sprintf( string, "sys.path.append(\"%s\")", QuotePath( quoted, path ));
-	if (PyRun_SimpleString( string ) == -1) {
-		Log(ERROR, "GUIScript", "Error running: %s", string);
+	sprintf( buffer, "sys.path.append(\"%s\")", QuotePath( quoted, path ));
+	if (PyRun_SimpleString( buffer ) == -1) {
+		Log(ERROR, "GUIScript", "Error running: %s", buffer);
 		return false;
 	}
 
-	sprintf( string, "import GemRB\n");
-	if (PyRun_SimpleString( string ) == -1) {
-		Log(ERROR, "GUIScript", "Error running: %s", string);
+	sprintf( buffer, "import GemRB\n");
+	if (PyRun_SimpleString( buffer ) == -1) {
+		Log(ERROR, "GUIScript", "Error running: %s", buffer);
 		return false;
 	}
 
-	sprintf(string, "GemRB.Version = '%s'", VERSION_GEMRB);
-	PyRun_SimpleString(string);
+	sprintf(buffer, "GemRB.Version = '%s'", VERSION_GEMRB);
+	PyRun_SimpleString(buffer);
 
 	// Detect GameType if it was set to auto
 	if (stricmp( core->GameType, "auto" ) == 0) {
@@ -16053,14 +16053,14 @@ bool GUIScript::Init(void)
 
 	// GameType-specific import path must have a higher priority than
 	// the generic one, so insert it before it
-	sprintf( string, "sys.path.insert(-1, \"%s\")", QuotePath( quoted, path2 ));
-	if (PyRun_SimpleString( string ) == -1) {
-		Log(ERROR, "GUIScript", "Error running: %s", string );
+	sprintf( buffer, "sys.path.insert(-1, \"%s\")", QuotePath( quoted, path2 ));
+	if (PyRun_SimpleString( buffer ) == -1) {
+		Log(ERROR, "GUIScript", "Error running: %s", buffer );
 		return false;
 	}
-	sprintf( string, "GemRB.GameType = \"%s\"", core->GameType);
-	if (PyRun_SimpleString( string ) == -1) {
-		Log(ERROR, "GUIScript", "Error running: %s", string );
+	sprintf( buffer, "GemRB.GameType = \"%s\"", core->GameType);
+	if (PyRun_SimpleString( buffer ) == -1) {
+		Log(ERROR, "GUIScript", "Error running: %s", buffer );
 		return false;
 	}
 
