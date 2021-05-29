@@ -62,16 +62,21 @@ class Actor;
 #define FX_DURATION_AFTER_EXPIRES            7 //this is a delayed non permanent effect (resolves to JUST_EXPIRED)
 #define FX_DURATION_PERMANENT_UNSAVED        8
 #define FX_DURATION_INSTANT_PERMANENT_AFTER_BONUSES   9//this is a special permanent
-#define FX_DURATION_JUST_EXPIRED             10
-#define MAX_TIMING_MODE 11
+#define FX_DURATION_INSTANT_LIMITED_TICKS    10 // same as 0, but in ticks instead of seconds
+#define FX_DURATION_JUST_EXPIRED             (FX_DURATION_INSTANT_LIMITED_TICKS + 1) // internal
+#define MAX_TIMING_MODE                      (FX_DURATION_JUST_EXPIRED + 1)
 #define FX_DURATION_ABSOLUTE                 0x1000
 
 // Effect resistance types
 #define FX_NO_RESIST_NO_DISPEL      0
+#define FX_CAN_DISPEL               1
 #define FX_CAN_RESIST_CAN_DISPEL     1
 //#define FX_CAN_RESIST_NO_DISPEL     2   //same as 0 (not resistable, not dispellable)
 #define FX_NO_RESIST_CAN_DISPEL    3
-#define FX_CAN_DISPEL               1
+#define FX_NO_RESIST_BYPASS_BOUNCE 4 // TODO: EE bit to bypass deflection/reflection/trap opcodes
+#define FX_NO_RESIST_SELF_TARGETED 8 // TODO: EE bit to fix an exploit, see IESDP
+// unused gap
+#define FX_SET_BY_ITEM 0x80000000 // TODO: EE bit for opcode 324, perhaps not needed (use SourceType?)
 
 // Effect save flags (ToBEx)
 #define SF_BYPASS_MIRROR_IMAGE 0x1000000

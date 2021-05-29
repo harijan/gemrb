@@ -16,23 +16,22 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef LOGGER_ANDROID_H
-#define LOGGER_ANDROID_H
+#ifndef LOGGER_VITA_H
+#define LOGGER_VITA_H
 
 #include "System/Logger.h"
 
 namespace GemRB {
 
-class GEM_EXPORT AndroidLogger : public Logger {
+class GEM_EXPORT VitaLogger : public Logger::LogWriter {
 public:
-	AndroidLogger();
-	virtual ~AndroidLogger();
+	VitaLogger(log_level level) : Logger::LogWriter(level) {};
 
 protected:
-	void LogInternal(log_level, const char*, const char*, log_color);
+	void LogInternal(log_level, const char*, const char*, log_color) override;
 };
 
-Logger* createAndroidLogger();
+Logger::WriterPtr createVitaLogger();
 
 }
 

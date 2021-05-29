@@ -1,5 +1,5 @@
 /* GemRB - Infinity Engine Emulator
- * Copyright (C) 2003 The GemRB Project
+ * Copyright (C) 2011 The GemRB Project
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -16,28 +16,22 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef LOGGER_FILE_H
-#define LOGGER_FILE_H
+#include "System/Logger/Vita.h"
 
-#include "System/Logger/Stdio.h"
+#include <psp2/kernel/clib.h> 
+
+#define printf sceClibPrintf
 
 namespace GemRB {
 
-class DataStream;
-
-class GEM_EXPORT FileLogger : public StdioLogger {
-public:
-	FileLogger(DataStream*);
-	virtual ~FileLogger();
-
-	void print(const char* message);
-
-private:
-	DataStream* log_file;
-};
-
-Logger* createFileLogger(DataStream*);
-
+void VitaLogger::LogInternal(log_level level, const char* owner, const char* message, log_color /*color*/)
+{
+	printf("[%s/%s]: %s\n", owner, log_level_text[level], message);
 }
 
-#endif
+Logger::WriterPtr createVitaLogger()
+{
+	return Logger::WriterPtr(new VitaLogger());
+}
+
+}

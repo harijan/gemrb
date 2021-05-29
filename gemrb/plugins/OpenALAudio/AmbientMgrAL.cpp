@@ -35,9 +35,15 @@ using namespace GemRB;
 
 // TODO: no more dependency on OpenAL, rename and move it?
 
-// legal nop if already reset
+AmbientMgrAL::AmbientMgrAL()
+: AmbientMgr()
+{
+	player = std::thread(&AmbientMgrAL::play, this);
+}
+
 AmbientMgrAL::~AmbientMgrAL()
 {
+	playing = false;
 	mutex.lock();
 	for (auto ambientSource : ambientSources) {
 		delete ambientSource;
@@ -47,48 +53,47 @@ AmbientMgrAL::~AmbientMgrAL()
 	mutex.unlock();
 	
 	cond.notify_all();
-	
-	if (player.joinable())
-		player.join();
+	player.join();
 }
 
-void AmbientMgrAL::setAmbients(const std::vector<Ambient *> &a)
+void AmbientMgrAL::ambientsSet(const std::vector<Ambient *>& a)
 {
-	AmbientMgr::setAmbients(a);
-
-	ambientSources.reserve(a.size());
-	for (auto source : a) {
+	mutex.lock();
+	for (auto ambientSource : ambientSources) {
+		delete ambientSource;
+	}
+	ambientSources.resize(0);
+	for (auto& source : a) {
 		ambientSources.push_back(new AmbientSource(source));
 	}
+	mutex.unlock();
 	core->GetAudioDrv()->UpdateVolume( GEM_SND_VOL_AMBIENTS );
-
-	player = std::thread(&AmbientMgrAL::play, this);
 }
 
 void AmbientMgrAL::activate(const std::string &name)
 {
-	std::lock_guard<std::mutex> l(mutex);
+	std::lock_guard<std::recursive_mutex> l(mutex);
 	AmbientMgr::activate(name);
 	cond.notify_all();
 }
 
 void AmbientMgrAL::activate()
 {
-	std::lock_guard<std::mutex> l(mutex);
+	std::lock_guard<std::recursive_mutex> l(mutex);
 	AmbientMgr::activate();
 	cond.notify_all();
 }
 
 void AmbientMgrAL::deactivate(const std::string &name)
 {
-	std::lock_guard<std::mutex> l(mutex);
+	std::lock_guard<std::recursive_mutex> l(mutex);
 	AmbientMgr::deactivate(name);
 	cond.notify_all();
 }
 
 void AmbientMgrAL::deactivate()
 {
-	std::lock_guard<std::mutex> l(mutex);
+	std::lock_guard<std::recursive_mutex> l(mutex);
 	AmbientMgr::deactivate();
 	hardStop();
 }
@@ -102,11 +107,8 @@ void AmbientMgrAL::hardStop() const
 
 int AmbientMgrAL::play()
 {
-	std::unique_lock<std::mutex> l(mutex);
-	while (!ambientSources.empty()) {
-		if (!core->GetGame()) { // we don't have any game, and we need one
-			break;
-		}
+	while (playing) {
+		std::unique_lock<std::recursive_mutex> l(mutex);
 		using namespace std::chrono;
 		using Clock = high_resolution_clock;
 		high_resolution_clock::time_point time = Clock::now();
@@ -132,8 +134,13 @@ unsigned int AmbientMgrAL::tick(uint64_t ticks) const
 	listener.x = (short) xpos;
 	listener.y = (short) ypos;
 
-	ieDword timeslice = SCHEDULE_MASK(core->GetGame()->GameTime);
+	const Game* game = core->GetGame();
+	ieDword timeslice = 0;
+	if (game) {
+		timeslice = SCHEDULE_MASK(game->GameTime);
+	}
 
+	std::lock_guard<std::recursive_mutex> l(mutex);
 	for (auto source : ambientSources) {
 		unsigned int newdelay = source->tick(ticks, listener, timeslice);
 		if (newdelay < delay) delay = newdelay;
@@ -143,7 +150,7 @@ unsigned int AmbientMgrAL::tick(uint64_t ticks) const
 
 void AmbientMgrAL::UpdateVolume(unsigned short volume)
 {
-	std::lock_guard<std::mutex> l(mutex);
+	std::lock_guard<std::recursive_mutex> l(mutex);
 	for (auto source : ambientSources) {
 		source->SetVolume(volume);
 	}

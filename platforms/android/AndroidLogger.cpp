@@ -16,30 +16,35 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#include "System/Logger/Vita.h"
+#include "AndroidLogger.h"
 
-#include <psp2/kernel/clib.h> 
-
-#define printf sceClibPrintf
+#include <android/log.h>
 
 namespace GemRB {
 
-VitaLogger::VitaLogger()
+void AndroidLogger::WriteLogMessage(const Logger::LogMessage& msg)
 {
+	android_LogPriority priority = ANDROID_LOG_INFO;
+	switch (msg.level) {
+		case FATAL:
+			priority = ANDROID_LOG_FATAL;
+			break;
+		case ERROR:
+			priority = ANDROID_LOG_ERROR;
+			break;
+		case WARNING:
+			priority = ANDROID_LOG_WARN;
+			break;
+		case DEBUG:
+			priority = ANDROID_LOG_DEBUG;
+			break;
+	}
+	__android_log_print(priority, "GemRB", "[%s/%s]: %s", msg.owner, log_level_text[msg.level], msg.message);
 }
 
-VitaLogger::~VitaLogger()
+Logger::WriterPtr createAndroidLogger()
 {
-}
-
-void VitaLogger::LogInternal(log_level level, const char* owner, const char* message, log_color /*color*/)
-{
-	printf("[%s/%s]: %s\n", owner, log_level_text[level], message);
-}
-
-Logger* createVitaLogger()
-{
-	return new VitaLogger();
+	return Logger::WriterPtr(new AndroidLogger());
 }
 
 }

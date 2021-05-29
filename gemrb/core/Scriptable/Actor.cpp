@@ -29,7 +29,6 @@
 #include "strrefs.h"
 #include "opcode_params.h"
 #include "voodooconst.h"
-#include "win32def.h"
 
 #include "Bitmap.h"
 #include "DataFileMgr.h"
@@ -1853,10 +1852,15 @@ GEM_EXPORT void UpdateActorConfig()
 	core->GetDictionary()->Lookup("Attack Sounds", war_cries);
 
 	//Handle Game Difficulty and Nightmare Mode
+	// iwd2 had it saved in the GAM, iwd1 only relied on the ini value
 	GameDifficulty = 0;
 	core->GetDictionary()->Lookup("Nightmare Mode", GameDifficulty);
-	if (GameDifficulty) {
+	Game *game = core->GetGame();
+	if (GameDifficulty || (game && game->HOFMode)) {
 		GameDifficulty = DIFF_INSANE;
+		if (game) game->HOFMode = true;
+		// also set it for GUIOPT
+		core->GetDictionary()->SetAt("Difficulty Level", DIFF_INSANE - 1);
 	} else {
 		GameDifficulty = 0;
 		core->GetDictionary()->Lookup("Difficulty Level", GameDifficulty);
@@ -3465,11 +3469,6 @@ void Actor::RefreshHP() {
 		bonus=1-Modified[IE_MAXHITPOINTS];
 	}
 
-	if (third) {
-		//toughness feat bonus (could be unhardcoded as a max hp bonus based on level if you want)
-		bonus += Modified[IE_FEAT_TOUGHNESS]*3;
-	}
-
 	//we still apply the maximum bonus to dead characters, but don't apply
 	//to current HP, or we'd have dead characters showing as having hp
 	Modified[IE_MAXHITPOINTS]+=bonus;
@@ -4939,7 +4938,7 @@ void Actor::PlayWalkSound()
 	ieDword thisTime;
 	ieResRef Sound;
 
-	thisTime = GetTickCount();
+	thisTime = GetTicks();
 	if (thisTime<nextWalk) return;
 	int cnt = anims->GetWalkSoundCount();
 	if (!cnt) return;
@@ -5224,7 +5223,7 @@ void Actor::SetMap(Map *map)
 }
 
 // Position should be a navmap point
-void Actor::SetPosition(const Point &nmptTarget, int jump, int radiusx, int radiusy)
+void Actor::SetPosition(const Point &nmptTarget, int jump, int radiusx, int radiusy, int size)
 {
 	ResetPathTries();
 	ClearPath(true);
@@ -5238,7 +5237,7 @@ void Actor::SetPosition(const Point &nmptTarget, int jump, int radiusx, int radi
 		Map *map = GetCurrentArea();
 		//clear searchmap so we won't block ourselves
 		map->ClearSearchMapFor(this);
-		map->AdjustPosition( p, radiusx, radiusy );
+		map->AdjustPosition(p, radiusx, radiusy, size);
 	}
 	if (p==q) {
 		MoveTo(nmptTarget);
@@ -5771,8 +5770,8 @@ void Actor::Die(Scriptable *killer, bool grantXP)
 	}
 
 	//a plot critical creature has died (iwd2)
-	//FIXME: BG2 uses the same field for special creatures (alternate melee damage)
-	if (BaseStats[IE_MC_FLAGS]&MC_PLOT_CRITICAL) {
+	// BG2 uses the same field for special creatures (alternate melee damage): MC_LARGE_CREATURE
+	if (third && BaseStats[IE_MC_FLAGS] & MC_PLOT_CRITICAL) {
 		core->GetGUIScriptEngine()->RunFunction("GUIWORLD", "DeathWindowPlot", false);
 	}
 	//ensure that the scripts of the actor will run as soon as possible
@@ -7124,10 +7123,7 @@ bool Actor::GetCombatDetails(int &tohit, bool leftorright, WeaponInfo& wi, ITMEx
 	}
 
 	// Elves get a racial THAC0 bonus with swords and bows, halflings with slings
-	if (raceID2Name.count(BaseStats[IE_RACE])) {
-		const char *raceName = raceID2Name[BaseStats[IE_RACE]];
-		prof += gamedata->GetRacialTHAC0Bonus(wi.prof, raceName);
-	}
+	prof += gamedata->GetRacialTHAC0Bonus(wi.prof, GetRaceName());
 
 	if (third) {
 		// iwd2 gives a dualwielding bonus when using a simple weapon in the offhand
@@ -7603,7 +7599,14 @@ void Actor::PerformAttack(ieDword gameTime)
 	int damage = 0;
 
 	if (hittingheader->DiceThrown<256) {
-		damage += LuckyRoll(hittingheader->DiceThrown, hittingheader->DiceSides, DamageBonus, LR_DAMAGELUCK);
+		// another bizarre 2E feature that's unused, but working
+		if (!third && hittingheader->AltDiceSides && target->GetStat(IE_MC_FLAGS) & MC_LARGE_CREATURE) {
+			// make sure not to discard other damage bonuses from above
+			int dmgBon = DamageBonus - hittingheader->DamageBonus + hittingheader->AltDamageBonus;
+			damage += LuckyRoll(hittingheader->AltDiceThrown, hittingheader->AltDiceSides, dmgBon, LR_DAMAGELUCK);
+		} else {
+			damage += LuckyRoll(hittingheader->DiceThrown, hittingheader->DiceSides, DamageBonus, LR_DAMAGELUCK);
+		}
 		if (damage < 0) damage = 0; // bad luck, effects and/or profs on lowlevel chars
 	} else {
 		damage = 0;
@@ -7876,7 +7879,8 @@ void Actor::UpdateActorState(ieDword gameTime) {
 		return;
 	}
 
-	int roundFraction = (gameTime-roundTime) % GetAdjustedTime(core->Time.round_size);
+	// use the combat round size as the original;  also skald song duration matches it
+	int roundFraction = (gameTime - roundTime) % GetAdjustedTime(core->Time.attack_round_size);
 
 	//actually, iwd2 has autosearch, also, this is useful for dayblindness
 	//apply the modal effect about every second (pst and iwds have round sizes that are not multiples of 15)
@@ -8617,7 +8621,7 @@ void Actor::Draw(const Region &screen)
 	}
 
 	if (remainingTalkSoundTime > 0) {
-		unsigned int currentTick = GetTickCount();
+		unsigned int currentTick = GetTicks();
 		unsigned int diffTime = currentTick - lastTalkTimeCheckAt;
 		lastTalkTimeCheckAt = currentTick;
 
@@ -10363,6 +10367,62 @@ void Actor::CreateDerivedStats()
 	} else {
 		CreateDerivedStatsBG();
 	}
+
+	// check for HoF upgrade
+	const Game *game = core->GetGame();
+	if (!InParty && game && game->HOFMode && !(BaseStats[IE_MC_FLAGS] & MC_HOF_UPGRADED)) {
+		BaseStats[IE_MC_FLAGS] |= MC_HOF_UPGRADED;
+
+		// our summons get less of an hp boost
+		if (BaseStats[IE_EA] <= EA_CONTROLLABLE) {
+			BaseStats[IE_MAXHITPOINTS] = 2 * BaseStats[IE_MAXHITPOINTS] + 20;
+			BaseStats[IE_HITPOINTS] = 2 * BaseStats[IE_HITPOINTS] + 20;
+		} else {
+			BaseStats[IE_MAXHITPOINTS] = 3 * BaseStats[IE_MAXHITPOINTS] + 80;
+			BaseStats[IE_HITPOINTS] = 3 * BaseStats[IE_HITPOINTS] + 80;
+		}
+
+		if (third) {
+			BaseStats[IE_CR] += 10;
+			BaseStats[IE_STR] += 10;
+			BaseStats[IE_DEX] += 10;
+			BaseStats[IE_CON] += 10;
+			BaseStats[IE_INT] += 10;
+			BaseStats[IE_WIS] += 10;
+			BaseStats[IE_CHR] += 10;
+			for (int i = 0; i < ISCLASSES; i++) {
+				int level = GetClassLevel(i);
+				if (!level) continue;
+				BaseStats[levelslotsiwd2[i]] += 12;
+			}
+			// NOTE: this is a guess, reports vary
+			// the attribute increase already contributes +5
+			for (int i = 0; i <= IE_SAVEWILL - IE_SAVEFORTITUDE; i++) {
+				BaseStats[savingthrows[i]] += 5;
+			}
+		} else {
+			BaseStats[IE_NUMBEROFATTACKS] += 2; // 1 more APR
+			ToHit.HandleFxBonus(5, true);
+			if (BaseStats[IE_XPVALUE]) {
+				BaseStats[IE_XPVALUE] = 2 * BaseStats[IE_XPVALUE] + 1000;
+			}
+			if (BaseStats[IE_GOLD]) {
+				BaseStats[IE_GOLD] += 75;
+			}
+			if (BaseStats[IE_LEVEL]) {
+				BaseStats[IE_LEVEL] += 12;
+			}
+			if (BaseStats[IE_LEVEL2]) {
+				BaseStats[IE_LEVEL2] += 12;
+			}
+			if (BaseStats[IE_LEVEL3]) {
+				BaseStats[IE_LEVEL3] += 12;
+			}
+			for (int i = 0; i < SAVECOUNT; i++) {
+				BaseStats[savingthrows[i]]++;
+			}
+		}
+	}
 }
 /* Checks if the actor is multiclassed (the MULTI column is positive) */
 bool Actor::IsMultiClassed() const
@@ -11293,7 +11353,7 @@ bool Actor::ConcentrationCheck() const
 
 	// anyone in a 5' radius?
 	std::vector<Actor *> neighbours = area->GetAllActorsInRadius(Pos, GA_NO_DEAD|GA_NO_NEUTRAL|GA_NO_ALLY|GA_NO_SELF|GA_NO_UNSCHEDULED|GA_NO_HIDDEN, 5, this);
-	if (neighbours.size() == 0) return true;
+	if (neighbours.empty()) return true;
 
 	// so there is someone out to get us and we should do the real concentration check
 	int roll = LuckyRoll(1, 20, 0);
@@ -11439,7 +11499,7 @@ const char *Actor::GetKitName(ieDword kitID) const
 
 void Actor::SetAnimatedTalking (unsigned int length) {
 	remainingTalkSoundTime = std::max(remainingTalkSoundTime, length);
-	lastTalkTimeCheckAt = GetTickCount();
+	lastTalkTimeCheckAt = GetTicks();
 }
 
 bool Actor::HasPlayerClass() const
@@ -11534,7 +11594,25 @@ void Actor::PlayArmorSound() const
 bool Actor::ShouldModifyMorale() const
 {
 	// pst ignores it for pcs, treating it more like reputation
-	return !pstflags || Modified[IE_EA] != EA_PC;
+	if (pstflags) {
+		return Modified[IE_EA] != EA_PC;
+	}
+
+	// in HoF, everyone else becomes immune to morale failure ("Mental Fortitude" in iwd2)
+	if (core->GetGame()->HOFMode) {
+		return Modified[IE_EA] == EA_PC;
+	}
+
+	return true;
+}
+
+const char* Actor::GetRaceName() const
+{
+	if (raceID2Name.count(BaseStats[IE_RACE])) {
+		return raceID2Name[BaseStats[IE_RACE]];
+	} else {
+		return nullptr;
+	}
 }
 
 }

@@ -1,3 +1,4 @@
+
 /* GemRB - Infinity Engine Emulator
  * Copyright (C) 2003 The GemRB Project
  *
@@ -16,23 +17,26 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef LOGGER_VITA_H
-#define LOGGER_VITA_H
+#ifndef LOGGER_WIN32_H
+#define LOGGER_WIN32_H
 
-#include "System/Logger.h"
+#include "System/Logger/Stdio.h"
+
+#include <windows.h>
 
 namespace GemRB {
 
-class GEM_EXPORT VitaLogger : public Logger {
+class Win32ConsoleLogger : public StdioLogWriter {
 public:
-	VitaLogger();
-	virtual ~VitaLogger();
+	Win32ConsoleLogger(log_level level, bool useColor);
+	~Win32ConsoleLogger();
 
-protected:
-	void LogInternal(log_level, const char*, const char*, log_color);
+private:
+	HANDLE hConsole;
+	DWORD dwMode = 0;
 };
 
-Logger* createVitaLogger();
+Logger::WriterPtr createWin32ConsoleLogger();
 
 }
 

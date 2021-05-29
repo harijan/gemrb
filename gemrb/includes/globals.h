@@ -28,10 +28,6 @@
 #ifndef GLOBALS_H
 #define GLOBALS_H
 
-#ifdef HAVE_CONFIG_H
-#include <config.h>
-#endif
-
 #include "ie_types.h"
 
 #define VERSION_GEMRB "0.8.7-git"
@@ -48,17 +44,13 @@
 #include "RGBAColor.h"
 #include "SClassID.h"
 #include "errors.h"
-#include "win32def.h"
 
 #include "Region.h"
 #include "System/DataStream.h"
 #include "System/String.h"
 
-#ifdef WIN32
-# include <algorithm>
-#else
-# include <sys/time.h>
-#endif
+#include <algorithm>
+#include <chrono>
 
 namespace GemRB {
 
@@ -208,14 +200,11 @@ GEM_EXPORT void CopyResRef(ieResRef d, const ieResRef s);
 
 #define SCHEDULE_MASK(time) (1 << core->Time.GetHour(time - core->Time.hour_size/2))
 
-#ifndef WIN32
-inline unsigned long GetTickCount()
+inline unsigned long GetTicks()
 {
-	struct timeval tv;
-	gettimeofday(&tv, NULL);
-	return (tv.tv_usec/1000) + (tv.tv_sec*1000);
+	using namespace std::chrono;
+	return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
 }
-#endif
 
 inline bool valid_number(const char* string, long& val)
 {

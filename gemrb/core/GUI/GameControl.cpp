@@ -20,7 +20,6 @@
 #include "GUI/GameControl.h"
 
 #include "strrefs.h"
-#include "win32def.h"
 
 #include "CharAnimations.h"
 #include "DialogHandler.h"
@@ -340,7 +339,7 @@ void GameControl::DrawTargetReticle(Point p, int size, bool animate, bool flash,
 	if (animate) {
 		// generates "step" from sequence 3 2 1 0 1 2 3 4
 		// updated each 1/15 sec
-		++step = tp_steps [(GetTickCount() >> 6) & 7];
+		++step = tp_steps [(GetTicks() >> 6) & 7];
 	} else {
 		step = 3;
 	}
@@ -1606,7 +1605,7 @@ void GameControl::TryToCast(Actor *source, const Point &tgt)
 	action->pointParameter=tgt;
 	if (spellOrItem>=0) {
 		if (spellIndex<0) {
-			sprintf(action->string0Parameter,"%.8s",spellName);
+			snprintf(action->string0Parameter, sizeof(action->string0Parameter), "%.8s", spellName);
 		} else {
 			CREMemorizedSpell *si;
 			//spell casting at target
@@ -1616,7 +1615,7 @@ void GameControl::TryToCast(Actor *source, const Point &tgt)
 				delete action;
 				return;
 			}
-			sprintf(action->string0Parameter,"%.8s",si->SpellResRef);
+			snprintf(action->string0Parameter, sizeof(action->string0Parameter), "%.8s", si->SpellResRef);
 		}
 	} else {
 		action->int0Parameter = spellSlot;
@@ -1673,7 +1672,7 @@ void GameControl::TryToCast(Actor *source, const Actor *tgt)
 	Action* action = GenerateActionDirect( Tmp, tgt);
 	if (spellOrItem>=0) {
 		if (spellIndex<0) {
-			sprintf(action->string0Parameter,"%.8s",spellName);
+			snprintf(action->string0Parameter, sizeof(action->string0Parameter), "%.8s", spellName);
 		} else {
 			const CREMemorizedSpell *si;
 			//spell casting at target
@@ -1683,7 +1682,7 @@ void GameControl::TryToCast(Actor *source, const Actor *tgt)
 				delete action;
 				return;
 			}
-			sprintf(action->string0Parameter,"%.8s",si->SpellResRef);
+			snprintf(action->string0Parameter, sizeof(action->string0Parameter), "%.8s", si->SpellResRef);
 		}
 	} else {
 		action->int0Parameter = spellSlot;

@@ -21,7 +21,6 @@
 #include "ZLibManager.h"
 
 #include "globals.h"
-#include "win32def.h"
 
 #include <zlib.h>
 
@@ -44,7 +43,7 @@ ZLibManager::~ZLibManager(void)
 int ZLibManager::Decompress(DataStream* dest, DataStream* source, unsigned int size_guess) const
 {
 	unsigned char bufferin[INPUTSIZE], bufferout[OUTPUTSIZE];
-	z_stream stream;
+	z_stream stream{};
 	int result;
 
 	stream.zalloc = Z_NULL;

@@ -18,17 +18,12 @@
 *
 */
 
-#ifdef HAVE_CONFIG_H
-#include <config.h>
-#endif
-
 #include "Interface.h"
 
 #include "defsounds.h" // for DS_TOOLTIP
 #include "exports.h"
 #include "globals.h"
 #include "strrefs.h"
-#include "win32def.h"
 #include "ie_cursors.h"
 
 #include "ActorMgr.h"
@@ -87,10 +82,6 @@
 #include "System/FileStream.h"
 #include "System/VFS.h"
 #include "System/StringBuffer.h"
-
-#ifdef HAVE_UNISTD_H
-#include <unistd.h>
-#endif
 
 #include <vector>
 
@@ -206,7 +197,6 @@ Interface::Interface()
 	MouseFeedback = 0;
 	TooltipDelay = 100;
 	IgnoreOriginalINI = 0;
-	Bpp = 32;
 	GUIScriptsPath[0] = 0;
 	GamePath[0] = 0;
 	SavePath[0] = 0;
@@ -278,7 +268,7 @@ Interface::Interface()
 	TLKEncoding.multibyte = false;
 	TLKEncoding.zerospace = false;
 	MagicBit = HasFeature(GF_MAGICBIT);
-	VersionOverride = ItemTypes = SlotTypes = Width = Height = 0;
+	VersionOverride = ItemTypes = SlotTypes = 0;
 	MultipleQuickSaves = false;
 	MaxPartySize = 6;
 	FeedbackLevel = 0;
@@ -350,16 +340,10 @@ Interface::~Interface(void)
 	DragItem(NULL,NULL);
 	delete AreaAliasTable;
 
-	if (music) {
-		music->HardEnd();
-	}
-	// stop any ambients which are still enqueued
-	if (AudioDriver) {
-		AmbientMgr *ambim = AudioDriver->GetAmbientMgr();
-		if (ambim) ambim->deactivate();
-	}
+	AudioDriver.release();
+
 	//destroy the highest objects in the hierarchy first!
-	delete game;
+	assert (game == nullptr);
 	delete calendar;
 	delete worldmap;
 	delete keymap;
@@ -487,7 +471,6 @@ Interface::~Interface(void)
 	// Removing all stuff from Cache, except bifs
 	if (!KeepCache) DelTree((const char *) CachePath, true);
 
-	AudioDriver.release();
 	video.release();
 }
 
@@ -1007,7 +990,7 @@ void Interface::Main()
 	wchar_t fpsstring[20] = {L"???.??? fps"};
 
 	unsigned long frame = 0, time, timebase;
-	timebase = GetTickCount();
+	timebase = GetTicks();
 	double frames;
 	Palette* palette = new Palette( ColorWhite, ColorBlack );
 	do {
@@ -1026,7 +1009,7 @@ void Interface::Main()
 		DrawWindows(true);
 		if (DrawFPS) {
 			frame++;
-			time = GetTickCount();
+			time = GetTicks();
 			if (time - timebase > 1000) {
 				frames = ( frame * 1000.0 / ( time - timebase ) );
 				timebase = time;
@@ -1040,6 +1023,7 @@ void Interface::Main()
 		if (TickHook)
 			TickHook();
 	} while (video->SwapBuffers() == GEM_OK && !(QuitFlag&QF_KILL));
+	QuitGame(0);
 	gamedata->FreePalette( palette );
 }
 
@@ -1343,7 +1327,6 @@ int Interface::Init(InterfaceConfig* config)
 	CONFIG_INT("MouseFeedback", MouseFeedback = );
 	CONFIG_INT("GamepadPointerSpeed", GamepadPointerSpeed = );
 	CONFIG_INT("VitaKeepAspectRatio", VitaKeepAspectRatio = );
-	CONFIG_INT("Logging", Logging = );
 
 #undef CONFIG_INT
 
@@ -1390,11 +1373,33 @@ int Interface::Init(InterfaceConfig* config)
 	CONFIG_PATH("GemRBPath", GemRBPath,
 				CopyGemDataPath(GemRBPath, _MAX_PATH));
 
-	CONFIG_PATH("CachePath", CachePath, "./Cache");
+	CONFIG_PATH("CachePath", CachePath, "./Cache2");
 	FixPath( CachePath, false );
 
+	// AppImage doesn't support relative urls at all
+	// we set the path to the data dir to cover unhardcoded and co,
+	// while plugins are statically linked, so it doesn't matter for them
+#ifdef DATA_DIR
+	char* appDir = getenv("APPDIR");
+	if (appDir) {
+		PathJoin(GemRBPath, appDir, DATA_DIR, nullptr);
+	}
+#endif
+
 	CONFIG_PATH("GUIScriptsPath", GUIScriptsPath, GemRBPath);
-	CONFIG_PATH("GamePath", GamePath, "");
+	CONFIG_PATH("GamePath", GamePath, ".");
+	// guess a few paths in case this one is bad; two levels deep for the fhs layout
+	char testPath[_MAX_PATH];
+	if (!PathJoin(testPath, GamePath, "chitin.key", nullptr)) {
+		Log(WARNING, "Interface", "Invalid GamePath detected, guessing from the current dir!");
+		if (PathJoin(testPath, "..", "chitin.key", nullptr)) {
+			strlcpy(GamePath, "..", sizeof(GamePath));
+		} else {
+			if (PathJoin(testPath, "..", "..", "chitin.key", nullptr)) {
+				strlcpy(GamePath, "../..", sizeof(GamePath));
+			}
+		}
+	}
 
 	CONFIG_PATH("GemRBOverridePath", GemRBOverridePath, GemRBPath);
 	CONFIG_PATH("GemRBUnhardcodedPath", GemRBUnhardcodedPath, GemRBPath);
@@ -1470,6 +1475,10 @@ int Interface::Init(InterfaceConfig* config)
 		return GEM_ERROR;
 	}
 	if (!KeepCache) DelTree((const char *) CachePath, false);
+	
+	// potentially disable logging before plugins are loaded (the log file is a plugin)
+	value = config->GetValueForKey("Logging");
+	if (value) ToggleLogging(atoi(value));
 
 	Log(MESSAGE, "Core", "Starting Plugin Manager...");
 	PluginMgr *plugin = PluginMgr::Get();
@@ -1593,8 +1602,11 @@ int Interface::Init(InterfaceConfig* config)
 		PathJoin(ChitinPath, GamePath, "chitin.key", nullptr);
 		if (!gamedata->AddSource(ChitinPath, "chitin.key", PLUGIN_RESOURCE_KEY)) {
 			Log(FATAL, "Core", "Failed to load \"chitin.key\"");
-			Log(ERROR, "Core", "This means you set the GamePath config variable incorrectly or that the game is running (Windows only).");
-			Log(ERROR, "Core", "It must point to the game directory that holds a readable chitin.key");
+			Log(ERROR, "Core", "This means:\n- you set the GamePath config variable incorrectly,\n\
+- you passed a bad game path to GemRB on the command line,\n\
+- you are not running GemRB from within a game dir,\n\
+- or the game is running (Windows only).");
+			Log(ERROR, "Core", "The path must point to a game directory with a readable chitin.key file.");
 			return GEM_ERROR;
 		}
 	}
@@ -1619,8 +1631,8 @@ int Interface::Init(InterfaceConfig* config)
 	PathJoin(unhardcodedTypePath, GemRBUnhardcodedPath, "unhardcoded", GameType, nullptr);
 	gamedata->AddSource(unhardcodedTypePath, "GemRB Unhardcoded data", PLUGIN_RESOURCE_CACHEDDIRECTORY, RM_REPLACE_SAME_SOURCE);
 
-	// fix the sample config default resolution for iwd2
-	if (stricmp(GameType, "iwd2") == 0 && Width == 640 && Height == 480) {
+	// fix the sample config default resolution for iwd2 and configless case also for the demo
+	if ((stricmp(GameType, "iwd2") == 0 || stricmp(GameType, "demo") == 0) && Width == 640 && Height == 480) {
 		Width = 800;
 		Height = 600;
 	}
@@ -2641,7 +2653,7 @@ Actor *Interface::SummonCreature(const ieResRef resource, const ieResRef vvcres,
 		}
 
 		map->AddActor(ab, true);
-		ab->SetPosition(position, true, 0);
+		ab->SetPosition(position, true, 0, 0, ab->size);
 		ab->RefreshEffects(NULL);
 
 		// guessing, since this trigger was unused in the originals — likely duplicating LastSummoner
@@ -3057,7 +3069,7 @@ void Interface::GameLoop(void)
 	bool do_update = GSUpdate(update_scripts);
 
 	if (game) {
-		if ( gc && (game->selected.size() > 0) ) {
+		if (gc && !game->selected.empty()) {
 			gc->ChangeMap(GetFirstSelectedPC(true), false);
 		}
 		//in multi player (if we ever get to it), only the server must call this
@@ -3755,6 +3767,7 @@ bool Interface::SaveConfig()
 	if (!fs->Create(ini_path)) {
 		PathJoin(ini_path, SavePath, gemrbINI, nullptr);
 		if (!fs->Create(ini_path)) {
+			delete fs;
 			return false;
 		}
 	}

@@ -37,6 +37,7 @@
 #include "Scriptable/PCStatStruct.h"
 #include "Variables.h"
 
+#include <atomic>
 #include <vector>
 
 namespace GemRB {
@@ -283,7 +284,7 @@ public:
 	size_t partysize;
 	ieDword Ticks;
 	ieDword interval; // 1000/AI_UPDATE (a tenth of a round in ms)
-	ieDword GameTime;
+	std::atomic_uint32_t GameTime {0};
 	ieDword LastScriptUpdate; // GameTime at which UpdateScripts last ran
 	ieDword RealTime;
 	ieWord  WhichFormation;
@@ -306,6 +307,7 @@ public:
 	bool hasInfra;
 	bool familiarBlock;
 	bool PartyAttack;
+	bool HOFMode;
 private:
 	/** reads the challenge rating table */
 	void LoadCRTable();

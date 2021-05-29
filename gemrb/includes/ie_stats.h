@@ -203,7 +203,7 @@ namespace GemRB {
 #define MC_EXPORTABLE           0x0800  // iwd2: either different meaning or leftover cruft (set in a few creatures)
 #define MC_HIDE_HP              0x1000  // also 'large creature' according to IE dev info (definitely something else in pst)
 #define MC_PLOT_CRITICAL        0x2000  //if dies, it means game over (IWD2)
-#define MC_LARGE_CREATURE       0x2000  //creature is subject to alternative melee damage - semi invulnerability (BG2)
+#define MC_LARGE_CREATURE       0x2000  // creature is subject to alternative melee damage (BG2), overlaps with MC_PLOT_CRITICAL
 #define MC_LIMBO_CREATURE       0x4000
 #define MC_BEENINPARTY          0x8000
 #define MC_ENABLED              0x8000  // TODO iwd2 override; used like activate/deactivate?
@@ -214,9 +214,13 @@ namespace GemRB {
 #define MC_IGNORE_RETURN        0x100000 // iwd2, won't be moved to start position when party rests, TODO: ee, prevent chunking death
 #define MC_IGNORE_INHIBIT_AI    0x200000 // iwd2 version of IE_ENABLEOFFSCREENAI (guess), elsewhere unused
 #define MC_NO_NIGHTMARE_MODS    0x400000 // TODO: ee
+#define MC_NO_TOOLTIPS          0x800000 // bit 23, TODO: ee
+// the following bits are set in some files in iwd2 and iwd1
+// it's in the range of the bg2 randomwalk bits 24-30, so likely the same between all the games
 //#define                       0x4000000 // iwd2, unkown, probably irrelevant; set for 50wyv{,h,r}
 //#define                       0x20000000 // iwd2, unkown, probably irrelevant
 //#define                       0x40000000 // iwd2, unkown, probably irrelevant
+#define MC_HOF_UPGRADED         0x80000000 // last bit, was used in memory only; repurposed to show HoF state
 
 // specflag values
 #define SPECF_DRIVEN          1 // automatic concentration success, no morale failure

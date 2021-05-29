@@ -186,18 +186,18 @@ int GetHPPercent(const Scriptable *Sender)
 
 void HandleBitMod(ieDword &value1, ieDword value2, int opcode)
 {
-	switch(opcode) {
+	switch (opcode) {
 		case OP_AND:
-			value1 = ( value1& value2 );
+			value1 &= value2;
 			break;
 		case OP_OR:
-			value1 = ( value1| value2 );
+			value1 |= value2;
 			break;
 		case OP_XOR:
-			value1 = ( value1^ value2 );
+			value1 ^= value2;
 			break;
 		case OP_NAND: //this is a GemRB extension
-			value1 = ( value1& ~value2 );
+			value1 &= ~value2;
 			break;
 		case OP_SET: //this is a GemRB extension
 			value1 = value2;
@@ -207,8 +207,8 @@ void HandleBitMod(ieDword &value1, ieDword value2, int opcode)
 
 // SPIT is not in the original engine spec, it is reserved for the
 // enchantable items feature
-//					0      1       2     3      4
-static const char *spell_suffices[]={"SPIT","SPPR","SPWI","SPIN","SPCL"};
+//                                        0       1       2       3       4
+static const char *spell_suffices[] = { "SPIT", "SPPR", "SPWI", "SPIN", "SPCL" };
 
 //this function handles the polymorphism of Spell[RES] actions
 //it returns spellres
@@ -223,7 +223,7 @@ bool ResolveSpellName(ieResRef spellres, Action *parameters)
 		if (type>4) {
 			return false;
 		}
-		sprintf(spellres, "%s%03d", spell_suffices[type], spellid);
+		snprintf(spellres, sizeof(ieResRef), "%s%03d", spell_suffices[type], spellid);
 	}
 	return gamedata->Exists(spellres, IE_SPL_CLASS_ID);
 }
@@ -236,7 +236,7 @@ void ResolveSpellName(ieResRef spellres, ieDword number)
 	if (type>4) {
 		type=0;
 	}
-	sprintf(spellres, "%s%03d", spell_suffices[type], spellid);
+	snprintf(spellres, sizeof(ieResRef), "%s%03d", spell_suffices[type], spellid);
 }
 
 ieDword ResolveSpellNumber(const ieResRef spellres)
@@ -2479,7 +2479,7 @@ unsigned int GetSpellDistance(const ieResRef spellres, Scriptable *Sender)
 	//make possible special return values (like 0xffffffff means the spell doesn't need distance)
 	//this is used with special targeting mode (3)
 	if (dist>0xff000000) {
-		return dist;
+		return 0xffffffff;
 	}
 	return dist * VOODOO_SPL_RANGE_F;
 }
@@ -2501,7 +2501,7 @@ unsigned int GetItemDistance(const ieResRef itemres, int header)
 	//make possible special return values (like 0xffffffff means the item doesn't need distance)
 	//this is used with special targeting mode (3)
 	if (dist>0xff000000) {
-		return dist;
+		return 0xffffffff;
 	}
 	return dist*VOODOO_ITM_RANGE_F;
 }

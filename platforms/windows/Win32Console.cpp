@@ -16,41 +16,32 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#include "System/Logger/Android.h"
+#include "Win32Console.h"
 
-#include <android/log.h>
+#include <cstdio>
+
+#define ADV_TEXT
+#include <conio.h>
 
 namespace GemRB {
 
-AndroidLogger::AndroidLogger()
-{}
-
-AndroidLogger::~AndroidLogger()
-{}
-
-void AndroidLogger::LogInternal(log_level level, const char* owner, const char* message, log_color /*color*/)
+Win32ConsoleLogger::Win32ConsoleLogger(log_level level, bool useColor)
+: StdioLogWriter(level, useColor)
 {
-	android_LogPriority priority = ANDROID_LOG_INFO;
-	switch (level) {
-		case FATAL:
-			priority = ANDROID_LOG_FATAL;
-			break;
-		case ERROR:
-			priority = ANDROID_LOG_ERROR;
-			break;
-		case WARNING:
-			priority = ANDROID_LOG_WARN;
-			break;
-		case DEBUG:
-			priority = ANDROID_LOG_DEBUG;
-			break;
-	}
-	__android_log_print(priority, "GemRB", "[%s/%s]: %s", owner, log_level_text[level], message);
+	hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+	
+	GetConsoleMode(hConsole, &dwMode);
+	SetConsoleMode(hConsole, dwMode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
 }
 
-Logger* createAndroidLogger()
+Win32ConsoleLogger::~Win32ConsoleLogger()
 {
-	return new AndroidLogger();
+	SetConsoleMode(hConsole, dwMode);
+}
+
+Logger::WriterPtr createWin32ConsoleLogger()
+{
+	return Logger::WriterPtr(new Win32ConsoleLogger(DEBUG, true));
 }
 
 }

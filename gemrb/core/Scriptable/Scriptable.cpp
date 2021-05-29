@@ -19,7 +19,6 @@
 
 #include "Scriptable/Scriptable.h"
 
-#include "win32def.h"
 #include "strrefs.h"
 #include "ie_cursors.h"
 #include "voodooconst.h"
@@ -499,17 +498,14 @@ void Scriptable::AddActionInFront(Action* aC)
 
 Action* Scriptable::GetNextAction() const
 {
-	if (actionQueue.size() == 0) {
-		return NULL;
-	}
+	if (actionQueue.empty()) return nullptr;
 	return actionQueue.front();
 }
 
 Action* Scriptable::PopNextAction()
 {
-	if (actionQueue.size() == 0) {
-		return NULL;
-	}
+	if (actionQueue.empty()) return nullptr;
+
 	Action* aC = actionQueue.front();
 	actionQueue.pop_front();
 	return aC;
@@ -1768,7 +1764,7 @@ void Selectable::DrawCircle(const Region &vp)
 		//doing a time dependent flashing of colors
 		//if it is too fast, increase the 6 to 7
 		unsigned long step;
-		step = GetTickCount();
+		step = GetTicks();
 		step = tp_steps [(step >> 7) & 7]*2;
 		mix.a = overColor.a;
 		mix.r = (overColor.r*step+selectedColor.r*(8-step))/8;

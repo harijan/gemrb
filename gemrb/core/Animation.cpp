@@ -20,8 +20,6 @@
 
 #include "Animation.h"
 
-#include "win32def.h"
-
 #include "Game.h"
 #include "Interface.h"
 #include "Map.h"
@@ -110,7 +108,7 @@ Sprite2D* Animation::LastFrame(void)
 	if (gameAnimation) {
 		starttime = core->GetGame()->Ticks;
 	} else {
-		starttime = GetTickCount();
+		starttime = GetTicks();
 	}
 	Sprite2D* ret;
 	if (playReversed)
@@ -130,7 +128,7 @@ Sprite2D* Animation::NextFrame(void)
 		if (gameAnimation) {
 			starttime = core->GetGame()->Ticks;
 		} else {
-			starttime = GetTickCount();
+			starttime = GetTicks();
 		}
 	}
 	Sprite2D* ret;
@@ -146,7 +144,7 @@ Sprite2D* Animation::NextFrame(void)
 	if (gameAnimation) {
 		time = core->GetGame()->Ticks;
 	} else {
-		time = GetTickCount();
+		time = GetTicks();
 	}
 
 	//it could be that we skip more than one frame in case of slow rendering

@@ -35,6 +35,7 @@
 #include "Holder.h"
 #include "InterfaceConfig.h"
 #include "Resource.h"
+#include "System/VFS.h"
 
 #include <map>
 #include <string>
@@ -821,11 +822,11 @@ public:
 	char GamePath[_MAX_PATH];
 	std::vector<std::string> CD[MAX_CD];
 	std::vector<std::string> ModPath;
-	int Width, Height, Bpp;
+	int Width = 640, Height = 480, Bpp = 32;
 	unsigned int TooltipDelay;
 	int IgnoreOriginalINI;
 	unsigned int FogOfWar;
-	bool CaseSensitive = true, SkipIntroVideos = false, DrawFPS = false, Logging = true;
+	bool CaseSensitive = true, SkipIntroVideos = false, DrawFPS = false;
 	bool TouchScrollAreas, UseSoftKeyboard;
 	unsigned short NumFingScroll, NumFingKboard, NumFingInfo;
 	int MouseFeedback;
