@@ -71,7 +71,7 @@ public:
 		if (Holder<T>::ptr) {
 			Holder<T>::ptr->acquire();
 			GUIScript *gs = (GUIScript *) core->GetGUIScriptEngine();
-			PyObject *obj = PyCapsule_New(Holder<T>::ptr, name, PyCapsuleRelease);
+			PyObject *obj = PyCapsule_New(Holder<T>::ptr, &T::ID, PyCapsuleRelease);
 			PyCapsule_SetContext(obj, &T::ID);
 			//PyObject *obj = PyCapsule_FromVoidPtrAndDesc(,,);
 			PyObject *tuple = PyTuple_New(1);
